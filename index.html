@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>天水圍新市鎮規劃模擬器</title>
 
-  <!-- React & ReactDOM CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Stable React & ReactDOM CDNs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 
-  <!-- Babel Standalone -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Stable Babel Standalone CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -18,7 +18,7 @@
 <body class="bg-slate-50 min-h-screen text-slate-800">
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="react,typescript">
+  <script type="text/babel">
     const { useState, useEffect } = React;
 
     const MAX_TURNS = 8;
@@ -455,23 +455,10 @@
 
       return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col">
-          <style>{`
-            @keyframes floatFadeUp {
-              0% { opacity: 0; transform: translate(-50%, 8px) scale(0.9); }
-              20% { opacity: 1; transform: translate(-50%, 0px) scale(1.05); }
-              80% { opacity: 1; transform: translate(-50%, -8px) scale(1); }
-              100% { opacity: 0; transform: translate(-50%, -20px) scale(0.95); }
-            }
-            .animate-financial-float {
-              animation: floatFadeUp 2.4s ease-out forwards;
-            }
-          `}</style>
-
           <header className="bg-emerald-700 text-white p-4 shadow-md flex justify-between items-center z-10 relative">
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setShowCover(true)}
-                title="返回封面與課程簡介"
                 className="bg-emerald-800 hover:bg-emerald-900 text-emerald-100 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 border border-emerald-600 transition"
               >
                 📖 封面簡介
@@ -501,22 +488,6 @@
                 <div className={`text-2xl font-black transition-transform duration-300 ${budgetPulse ? 'scale-125 text-yellow-100' : ''} ${budget < 200 ? 'text-red-300' : 'text-yellow-300'}`}>
                   💰 {budget} <span className="text-xs font-normal">萬</span>
                 </div>
-
-                {financialEffect && (
-                  <div 
-                    key={financialEffect.key} 
-                    className="absolute top-12 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-30 animate-financial-float whitespace-nowrap"
-                  >
-                    <span className="text-xs font-black text-emerald-300 bg-slate-900/95 px-2.5 py-1 rounded-full shadow-xl border border-emerald-500/60 flex items-center gap-1">
-                      📈 +{financialEffect.income}萬 (年度稅收)
-                    </span>
-                    {financialEffect.upkeep > 0 && (
-                      <span className="text-xs font-black text-red-300 bg-slate-900/95 px-2.5 py-1 rounded-full shadow-xl border border-red-500/60 flex items-center gap-1 mt-1">
-                        💸 -{financialEffect.upkeep}萬 (設施維護費)
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           </header>
@@ -524,7 +495,7 @@
           <main className="flex-1 flex flex-col md:flex-row overflow-hidden max-w-7xl mx-auto w-full shadow-2xl bg-white">
             <aside className="w-full md:w-80 bg-slate-100 p-5 border-r border-slate-200 overflow-y-auto flex flex-col gap-6">
               <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
-                 <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
                    <span className="text-blue-500">🏠</span> 陳氏一家心情
                 </h2>
@@ -572,39 +543,6 @@
                   </div>
                 </div>
               </section>
-
-              <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
-                <h2 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
-                  <span>📘</span> 城市管理指南
-                </h2>
-                <div className="space-y-2.5 text-xs text-slate-600 leading-relaxed">
-                  <div className="bg-amber-50/70 p-2.5 rounded-lg border border-amber-100">
-                    <div className="font-bold text-amber-900 mb-0.5 flex items-center gap-1">
-                      <span>💰</span> 建設基金
-                    </div>
-                    <p className="text-slate-600">政府庫房的總資金，用於建設新設施。每年會根據城市發展獲得稅收。</p>
-                  </div>
-
-                  <div className="bg-red-50/70 p-2.5 rounded-lg border border-red-100">
-                    <div className="font-bold text-red-900 mb-0.5 flex items-center gap-1">
-                      <span>💸</span> 維護費
-                    </div>
-                    <p className="text-slate-600">維持設施日常運作的必要開支。每年會自動從建設基金中扣除。</p>
-                  </div>
-
-                  <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-100">
-                    <div className="font-bold text-emerald-900 mb-1 flex items-center gap-1">
-                      <span>📊</span> 各項指標定義
-                    </div>
-                    <ul className="space-y-1 text-slate-600 pl-1">
-                      <li><strong className="text-emerald-700">🌲 環境：</strong>城市的綠化與生態保育程度。</li>
-                      <li><strong className="text-yellow-700">📈 經濟：</strong>商業與就業發展程度。</li>
-                      <li><strong className="text-blue-700">😊 市民心情：</strong>居民對現時社區設施的滿意度。</li>
-                    </ul>
-                  </div>
-                </div>
-              </section>
             </aside>
 
             <section className="flex-1 bg-slate-200 p-6 flex flex-col relative">
@@ -648,13 +586,8 @@
                               <img 
                                 src={BUILDINGS[plot].img} 
                                 alt={BUILDINGS[plot].name} 
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-                                }}
                                 className="max-w-full max-h-full object-contain rounded-xl opacity-90 drop-shadow-md"
                               />
-                              <span className="text-5xl md:text-6xl hidden filter drop-shadow-md">{BUILDINGS[plot].icon}</span>
                             </div>
                           ) : (
                             <span className="text-5xl md:text-6xl mb-1 filter drop-shadow-md">{BUILDINGS[plot].icon}</span>
