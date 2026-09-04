@@ -79,13 +79,13 @@
     ];
 
     const BUILDINGS = {
-      housing: { id: 'housing', name: '公共屋邨', cost: 150, upkeep: 10, icon: '🏢', img: './building%20logo.png', desc: '基礎居住設施。全家人心情+10', color: 'bg-blue-100 border-blue-400 text-blue-700' },
-      transport: { id: 'transport', name: '交通樞紐', cost: 250, upkeep: 20, icon: '🚆', img: './train%20logo.png', desc: '解決跨區通勤問題。爸爸+40, 媽媽+20, 經濟+15', color: 'bg-slate-100 border-slate-400 text-slate-700' },
-      commercial: { id: 'commercial', name: '大型街市', cost: 200, upkeep: 15, icon: '🛒', img: './market%20logo.png', desc: '滿足日常購買食材的需要。媽媽+40, 經濟+30, 環境-10', color: 'bg-yellow-100 border-yellow-400 text-yellow-700' },
-      hospital: { id: 'hospital', name: '綜合醫院', cost: 300, upkeep: 30, icon: '🏥', img: './hospital%20logo.png', desc: '應付醫療需求。爺爺+50, 全家人+5', color: 'bg-red-50 border-red-400 text-red-700' },
+      housing: { id: 'housing', name: '公共屋邨', cost: 150, upkeep: 10, icon: '🏢', img: 'building logo.png', desc: '基礎居住設施。全家人心情+10', color: 'bg-blue-100 border-blue-400 text-blue-700' },
+      transport: { id: 'transport', name: '交通樞紐', cost: 250, upkeep: 20, icon: '🚆', img: 'train logo.png', desc: '解決跨區通勤問題。爸爸+40, 媽媽+20, 經濟+15', color: 'bg-slate-100 border-slate-400 text-slate-700' },
+      commercial: { id: 'commercial', name: '大型街市', cost: 200, upkeep: 15, icon: '🛒', img: 'market logo.png', desc: '滿足日常購買食材的需要。媽媽+40, 經濟+30, 環境-10', color: 'bg-yellow-100 border-yellow-400 text-yellow-700' },
+      hospital: { id: 'hospital', name: '綜合醫院', cost: 300, upkeep: 30, icon: '🏥', img: 'hospital logo.png', desc: '應付醫療需求。爺爺+50, 全家人+5', color: 'bg-red-50 border-red-400 text-red-700' },
       school: { id: 'school', name: '中小學校網', cost: 200, upkeep: 15, icon: '🏫', img: null, desc: '原區就學。哥哥+40, 妹妹+40', color: 'bg-orange-100 border-orange-400 text-orange-700' },
-      park: { id: 'park', name: '濕地保育公園', cost: 150, upkeep: 10, icon: '🌳', img: './wetland%20logo.png', desc: '保護生態。妹妹+30, 爺爺+20, 環境+40', color: 'bg-emerald-100 border-emerald-400 text-emerald-700' },
-      pond: { id: 'pond', name: '市鎮公園', cost: 100, upkeep: 5, icon: '🦆', img: './pond%20logo.png', desc: '休憩空間。全家人心情+5', color: 'bg-green-100 border-green-400 text-green-700' }
+      park: { id: 'park', name: '濕地保育公園', cost: 150, upkeep: 10, icon: '🌳', img: 'wetland logo.png', desc: '保護生態。妹妹+30, 爺爺+20, 環境+40', color: 'bg-emerald-100 border-emerald-400 text-emerald-700' },
+      pond: { id: 'pond', name: '市鎮公園', cost: 100, upkeep: 5, icon: '🦆', img: 'pond logo.png', desc: '休憩空間。全家人心情+5', color: 'bg-green-100 border-green-400 text-green-700' }
     };
 
     const QUIZ_POOL = [
@@ -587,6 +587,12 @@
                                 src={BUILDINGS[plot].img} 
                                 alt={BUILDINGS[plot].name} 
                                 className="max-w-full max-h-full object-contain rounded-xl opacity-90 drop-shadow-md"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  if (e.target.parentNode) {
+                                    e.target.parentNode.innerHTML = `<span class="text-5xl md:text-6xl mb-1 filter drop-shadow-md">${BUILDINGS[plot].icon}</span>`;
+                                  }
+                                }}
                               />
                             </div>
                           ) : (
@@ -638,7 +644,17 @@
                       <div className="flex gap-3">
                         <div className={`w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-lg border bg-white overflow-hidden shadow-inner ${b.color.split(' ')[1]}`}>
                            {b.img ? (
-                              <img src={b.img} alt={b.name} className="w-full h-full object-cover" />
+                              <img 
+                                src={b.img} 
+                                alt={b.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  if (e.target.parentNode) {
+                                    e.target.parentNode.innerHTML = `<span class="text-3xl">${b.icon}</span>`;
+                                  }
+                                }} 
+                              />
                            ) : (
                               <span className="text-3xl">{b.icon}</span>
                            )}
