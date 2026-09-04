@@ -25,6 +25,16 @@
     const INITIAL_BUDGET = 1000;
     const TAX_REVENUE = 150;
 
+    // 6 Designated Planning Zones from Game Plan
+    const ZONES = [
+      { id: 0, name: '南部生活區', tag: '建議: 住宅/學校', icon: '🏡' },
+      { id: 1, name: '核心商業區', tag: '建議: 街市商場', icon: '🛒' },
+      { id: 2, name: '西部動脈區', tag: '建議: 綜合醫院', icon: '🏥' },
+      { id: 3, name: '南端交通樞紐', tag: '建議: 屯馬線鐵路', icon: '🚆' },
+      { id: 4, name: '中央綠肺區', tag: '建議: 市鎮公園', icon: '🦆' },
+      { id: 5, name: '北部后海灣生態區', tag: '建議: 濕地公園', icon: '🌳' }
+    ];
+
     const playSFX = (type) => {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -71,11 +81,11 @@
     };
 
     const FAMILY_MEMBERS = [
-      { id: 'dad', name: '爸爸 (上班族)', needs: '交通', icon: '👔' },
-      { id: 'mom', name: '媽媽 (主婦)', needs: '購物', icon: '👜' },
-      { id: 'grandpa', name: '爺爺 (長者)', needs: '醫療/休閒', icon: '👴' },
-      { id: 'boy', name: '哥哥小皇', needs: '教育/玩樂', icon: '👦' },
-      { id: 'girl', name: '妹妹小英', needs: '環境/自然', icon: '👧' }
+      { id: 'dad', name: '爸爸 (上班族)', needs: '交通', icon: '👔', avatarHappy: 'avatar_father_happy.png', avatarSad: 'avatar_father_stressed.png' },
+      { id: 'mom', name: '媽媽 (主婦)', needs: '購物', icon: '👜', avatarHappy: 'avatar_mother_satisfied.png', avatarSad: 'avatar_mother_worried.png' },
+      { id: 'grandpa', name: '爺爺 (長者)', needs: '醫療/休閒', icon: '👴', avatarHappy: 'avatar_grandfather_healthy.png', avatarSad: 'avatar_grandfather_sick.png' },
+      { id: 'boy', name: '哥哥小皇', needs: '教育/玩樂', icon: '👦', avatarHappy: 'avatar_child_joyful.png', avatarSad: 'avatar_child_bored.png' },
+      { id: 'girl', name: '妹妹小英', needs: '環境/自然', icon: '👧', avatarHappy: 'avatar_child_joyful.png', avatarSad: 'avatar_child_bored.png' }
     ];
 
     const BUILDINGS = {
@@ -141,6 +151,9 @@
 
     function App() {
       const [showCover, setShowCover] = useState(true);
+      const [className, setClassName] = useState('4A');
+      const [studentName, setStudentName] = useState('陳小明');
+
       const [turn, setTurn] = useState(1);
       const [budget, setBudget] = useState(INITIAL_BUDGET);
       const [plots, setPlots] = useState(Array(6).fill(null));
@@ -200,6 +213,8 @@
         let newPlots = [...plots];
         newPlots[selectedPlot] = buildingKey;
         setPlots(newPlots);
+
+        const zoneName = ZONES[selectedPlot].name;
         setSelectedPlot(null);
         setBuiltThisTurn(true);
         triggerSFX('build');
@@ -213,7 +228,7 @@
         if (buildingKey === 'park') { moodChanges = { girl: 30, grandpa: 20 }; updateStats(40, 0); }
 
         updateMoods(moodChanges);
-        addLog(`[建設] 在地塊 ${selectedPlot + 1} 興建了 ${building.name}！`);
+        addLog(`[建設] 在【${zoneName}】興建了 ${building.name}！`);
       };
 
       const handleEndTurnClick = () => {
@@ -339,21 +354,21 @@
         
         if (reason === 'bankrupt') {
           title = "❌ 破產免職！";
-          desc = "您耗盡了所有城市建設基金，無力支付設施維護費。天水圍新市鎮計劃宣告失敗，您已被撤職。";
+          desc = `${className} ${studentName} 署長耗盡了所有城市建設基金，無力支付設施維護費。天水圍新市鎮計劃宣告失敗，您已被撤職。`;
         } else {
           const avgMood = Object.values(moods).reduce((a, b) => a + b, 0) / 5;
           if (avgMood >= 70 && env >= 60) {
             title = "🏆 五星級宜居典範城！";
-            desc = "太棒了！您成功平衡了各方需求，天水圍成為了兼具綠色生態與完善設施的夢幻新市鎮！陳氏一家非常幸福！";
+            desc = `太棒了，${className} ${studentName} 署長！您成功平衡了各方需求，天水圍成為了兼具綠色生態與完善設施的夢幻新市鎮！陳氏一家非常幸福！`;
           } else if (avgMood >= 50 && env < 40) {
             title = "🏢 水泥森林浩劫";
-            desc = "雖然您解決了部分民生需求，但過度發展導致環境被破壞。這是一座失去靈魂的水泥森林，居民感到壓抑。";
+            desc = `雖然 ${studentName} 署長解決了部分民生需求，但過度發展導致環境被破壞。這是一座失去靈魂的水泥森林，居民感到壓抑。`;
           } else if (avgMood < 50) {
             title = "😢 悲情城市...";
             desc = "設施嚴重不足，居民生活充滿怨言。跨區通勤與醫療短缺讓這個家庭苦不堪言，規劃有待改善。";
           } else {
             title = "✅ 發展中新市鎮";
-            desc = "您完成了8年的任期，天水圍有了一定的發展，但仍有進步空間。感謝您的努力！";
+            desc = `恭喜 ${className} ${studentName} 署長完成了8年的任期！天水圍有了一定的發展，但仍有進步空間。感謝您的努力！`;
           }
         }
 
@@ -376,7 +391,7 @@
         setBuiltThisTurn(false);
         setCooldown(5);
         setTurnQuizzes(generateRunQuizzes());
-        setLog(["遊戲已重置。請開始您的新任期！"]);
+        setLog([`遊戲已重置。歡迎 ${className} ${studentName} 署長開始您的新任期！`]);
         closeModal();
       };
 
@@ -406,6 +421,7 @@
       if (showCover) {
         return (
           <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col justify-between p-4 md:p-8 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-20 bg-cover bg-center pointer-events-none" style={{ backgroundImage: 'url("bg_game_cover_title.png")' }}></div>
             <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
             <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -421,32 +437,61 @@
               </div>
             </header>
 
-            <main className="max-w-3xl mx-auto w-full my-auto py-8 flex flex-col items-center text-center z-10">
+            <main className="max-w-xl mx-auto w-full my-auto py-8 flex flex-col items-center text-center z-10 bg-slate-800/90 backdrop-blur-md p-8 rounded-3xl border border-slate-700 shadow-2xl">
               <div className="inline-block bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold px-4 py-1.5 rounded-full text-sm mb-4">
                 第2課：發展與保育
               </div>
 
-              <h1 className="text-3xl md:text-5xl font-black text-white mb-6 tracking-tight drop-shadow-md">
+              <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight drop-shadow-md">
                 🏗️ 建設理想天水圍
               </h1>
-
-              <p className="text-slate-300 text-lg md:text-xl mb-8 leading-relaxed max-w-xl font-medium">
-                成為優秀的城市規劃師！<br/>
-                為陳氏一家建設完善的社區，<br/>
-                同時緊記保護大自然生態！
+              <p className="text-slate-300 text-sm md:text-base mb-6 font-medium">
+                成為天水圍新市鎮首席規劃署長！
               </p>
 
+              {/* Student Name & Class Allocation Form */}
+              <div className="w-full bg-slate-900/80 p-5 rounded-2xl border border-slate-700/80 mb-6 text-left">
+                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  👤 規劃署長身份登記 (請輸入學生資料)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 font-semibold">班別 (Class)</label>
+                    <input 
+                      type="text" 
+                      value={className} 
+                      onChange={(e) => setClassName(e.target.value)}
+                      placeholder="例: 4A"
+                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1 font-semibold">學生姓名 (Name)</label>
+                    <input 
+                      type="text" 
+                      value={studentName} 
+                      onChange={(e) => setStudentName(e.target.value)}
+                      placeholder="例: 陳小明"
+                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <button
-                onClick={() => setShowCover(false)}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xl font-extrabold px-12 py-5 rounded-2xl shadow-xl transition-all transform hover:scale-105 active:scale-95 flex items-center gap-3 cursor-pointer mt-4"
+                onClick={() => {
+                  setShowCover(false);
+                  addLog(`歡迎 ${className} ${studentName} 署長就任！請開始您的規劃。`);
+                }}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-extrabold py-4 rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
-                🚀 開始規劃
+                🚀 接受任命．開始規劃
               </button>
             </main>
 
             <footer className="max-w-4xl mx-auto w-full text-center z-10 pt-4 border-t border-slate-800">
               <p className="text-slate-500 text-xs">
-                由英皇書院同學會小學提供
+                由英皇書院同學會小學人文科編製
               </p>
             </footer>
           </div>
@@ -473,7 +518,9 @@
                 <h1 className="text-xl md:text-2xl font-bold tracking-wider flex items-center gap-2">
                   🏛️ 天水圍新市鎮規劃模擬器
                 </h1>
-                <p className="text-emerald-200 text-xs md:text-sm">英皇書院同學會小學人文科 | 第2課 發展與保育</p>
+                <p className="text-emerald-200 text-xs md:text-sm font-medium">
+                  署長: <span className="text-yellow-300 font-bold">{className} {studentName}</span> | 英皇書院同學會小學
+                </p>
               </div>
             </div>
             <div className="flex gap-6 items-center bg-emerald-800/50 p-2 rounded-lg border border-emerald-600/50 shadow-inner">
@@ -500,20 +547,34 @@
                    <span className="text-blue-500">🏠</span> 陳氏一家心情
                 </h2>
                 <div className="space-y-4">
-                  {FAMILY_MEMBERS.map(member => (
-                    <div key={member.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                      <div className="text-3xl bg-white w-12 h-12 rounded-full flex items-center justify-center shadow-sm border border-slate-200">
-                        {member.icon}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="font-semibold">{member.name}</span>
-                          <span className="text-slate-500 text-xs">重視:{member.needs}</span>
+                  {FAMILY_MEMBERS.map(member => {
+                    const currentMood = moods[member.id];
+                    const avatarSrc = currentMood > 50 ? member.avatarHappy : member.avatarSad;
+                    return (
+                      <div key={member.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-white border border-slate-200 overflow-hidden shadow-sm flex-shrink-0">
+                          <img 
+                            src={avatarSrc} 
+                            alt={member.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.parentNode) {
+                                e.target.parentNode.innerHTML = `<span class="text-2xl">${member.icon}</span>`;
+                              }
+                            }}
+                          />
                         </div>
-                        <MoodBar val={moods[member.id]} />
+                        <div className="flex-1">
+                          <div className="flex justify-between text-sm">
+                            <span className="font-semibold">{member.name}</span>
+                            <span className="text-slate-500 text-xs">重視:{member.needs}</span>
+                          </div>
+                          <MoodBar val={currentMood} />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
@@ -548,7 +609,7 @@
             <section className="flex-1 bg-slate-200 p-6 flex flex-col relative">
               <div className="flex justify-between items-center mb-6 bg-white p-3 rounded-lg shadow-sm border border-slate-300">
                 <h2 className="text-xl font-bold flex items-center gap-2 text-slate-700">
-                   🗺️ 規劃區圖 (點擊空地建設)
+                   🗺️ 6大特色分區地圖
                 </h2>
                 <button 
                   onClick={handleEndTurnClick}
@@ -563,57 +624,67 @@
                 </button>
               </div>
               
+              {/* 6 Pre-allocated Zones Grid */}
               <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 items-center justify-center p-4">
-                {plots.map((plot, idx) => (
-                  <div 
-                    key={idx} 
-                    onClick={() => !plot && setSelectedPlot(idx)}
-                    className={`
-                      aspect-square rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 relative shadow-md overflow-hidden
-                      ${plot 
-                        ? BUILDINGS[plot].color + ' shadow-lg transform hover:-translate-y-1 border-4' 
-                        : selectedPlot === idx 
-                          ? 'bg-blue-100 border-4 border-blue-500 shadow-inner' 
-                          : 'bg-emerald-50/50 border-4 border-dashed border-emerald-300 hover:bg-emerald-100/80 hover:border-emerald-400'
-                      }
-                    `}
-                  >
-                    {plot ? (
-                      <>
-                        <div className="flex flex-col items-center justify-center p-2 z-10">
-                          {BUILDINGS[plot].img ? (
-                            <div className="w-16 h-16 md:w-20 md:h-20 flex items-center justify-center mb-1">
-                              <img 
-                                src={BUILDINGS[plot].img} 
-                                alt={BUILDINGS[plot].name} 
-                                className="max-w-full max-h-full object-contain rounded-xl opacity-90 drop-shadow-md"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  if (e.target.parentNode) {
-                                    e.target.parentNode.innerHTML = `<span class="text-5xl md:text-6xl mb-1 filter drop-shadow-md">${BUILDINGS[plot].icon}</span>`;
-                                  }
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <span className="text-5xl md:text-6xl mb-1 filter drop-shadow-md">{BUILDINGS[plot].icon}</span>
-                          )}
+                {ZONES.map((zone, idx) => {
+                  const plot = plots[idx];
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => !plot && setSelectedPlot(idx)}
+                      className={`
+                        aspect-square rounded-2xl flex flex-col items-center justify-between p-3 cursor-pointer transition-all duration-300 relative shadow-md overflow-hidden
+                        ${plot 
+                          ? BUILDINGS[plot].color + ' shadow-lg transform hover:-translate-y-1 border-4' 
+                          : selectedPlot === idx 
+                            ? 'bg-blue-100 border-4 border-blue-500 shadow-inner' 
+                            : 'bg-emerald-50/70 border-4 border-dashed border-emerald-300 hover:bg-emerald-100/90 hover:border-emerald-400'
+                        }
+                      `}
+                    >
+                      {/* Zone Allocation Title Header */}
+                      <div className="w-full flex justify-between items-center bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg shadow-xs z-10 border border-slate-200/60">
+                        <span className="text-xs font-black text-slate-700 flex items-center gap-1">
+                          📍 {zone.name}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-semibold">{zone.icon}</span>
+                      </div>
+
+                      {plot ? (
+                        <>
+                          <div className="flex flex-col items-center justify-center my-auto z-10">
+                            {BUILDINGS[plot].img ? (
+                              <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center">
+                                <img 
+                                  src={BUILDINGS[plot].img} 
+                                  alt={BUILDINGS[plot].name} 
+                                  className="max-w-full max-h-full object-contain rounded-xl opacity-90 drop-shadow-md"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    if (e.target.parentNode) {
+                                      e.target.parentNode.innerHTML = `<span class="text-4xl md:text-5xl filter drop-shadow-md">${BUILDINGS[plot].icon}</span>`;
+                                    }
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-4xl md:text-5xl filter drop-shadow-md">{BUILDINGS[plot].icon}</span>
+                            )}
+                          </div>
+                          <span className="font-bold text-center text-xs bg-white/90 px-2 py-0.5 rounded-full z-10 shadow-sm">{BUILDINGS[plot].name}</span>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center my-auto z-10 text-center">
+                          <span className={`text-3xl ${selectedPlot === idx ? 'text-blue-500' : 'text-emerald-400/60'}`}>+</span>
+                          <span className={`text-xs mt-1 font-bold ${selectedPlot === idx ? 'text-blue-600' : 'text-emerald-600/80'}`}>
+                            {selectedPlot === idx ? '已選取此地塊' : '點擊選擇建設'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 mt-0.5">{zone.tag}</span>
                         </div>
-                        <span className="font-bold text-center text-xs md:text-sm bg-white/90 px-2 py-0.5 rounded-full z-10 mt-auto mb-5 shadow-sm">{BUILDINGS[plot].name}</span>
-                        <span className="absolute bottom-1 text-[10px] font-semibold bg-red-100/90 text-red-700 px-2 py-0.5 rounded-full border border-red-200 z-10">
-                          維護 -{BUILDINGS[plot].upkeep}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className={`text-4xl ${selectedPlot === idx ? 'text-blue-500' : 'text-emerald-400/50'}`}>+</span>
-                        <span className={`text-sm mt-2 font-semibold ${selectedPlot === idx ? 'text-blue-600' : 'text-emerald-600/70'}`}>
-                          {selectedPlot === idx ? '選擇了此地塊' : '點擊建設'}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-4 bg-gray-900 text-green-400 p-3 rounded-lg shadow-inner border border-gray-700 h-32 overflow-y-auto font-mono text-xs">
@@ -627,8 +698,11 @@
 
             {selectedPlot !== null && (
               <aside className="w-full md:w-80 bg-white p-5 border-l border-slate-200 flex flex-col shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] z-20">
-                <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-200">
-                  <h2 className="text-xl font-bold text-slate-800">🏗️ 建設清單</h2>
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">🏗️ 建設清單</h2>
+                    <p className="text-xs text-emerald-600 font-semibold">目標：{ZONES[selectedPlot].name}</p>
+                  </div>
                   <button 
                     onClick={() => setSelectedPlot(null)}
                     className="text-slate-400 hover:text-red-500 text-2xl leading-none"
@@ -636,13 +710,12 @@
                     &times;
                   </button>
                 </div>
-                <p className="text-sm text-slate-500 mb-4">請為地塊 {selectedPlot + 1} 選擇要興建的設施：</p>
                 
                 <div className="space-y-3 overflow-y-auto pr-1 pb-4">
                   {Object.values(BUILDINGS).map(b => (
                     <div key={b.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl hover:shadow-md transition-shadow">
                       <div className="flex gap-3">
-                        <div className={`w-16 h-16 flex-shrink-0 flex items-center justify-center rounded-lg border bg-white overflow-hidden shadow-inner ${b.color.split(' ')[1]}`}>
+                        <div className={`w-14 h-14 flex-shrink-0 flex items-center justify-center rounded-lg border bg-white overflow-hidden shadow-inner ${b.color.split(' ')[1]}`}>
                            {b.img ? (
                               <img 
                                 src={b.img} 
@@ -651,17 +724,17 @@
                                 onError={(e) => {
                                   e.target.style.display = 'none';
                                   if (e.target.parentNode) {
-                                    e.target.parentNode.innerHTML = `<span class="text-3xl">${b.icon}</span>`;
+                                    e.target.parentNode.innerHTML = `<span class="text-2xl">${b.icon}</span>`;
                                   }
                                 }} 
                               />
                            ) : (
-                              <span className="text-3xl">{b.icon}</span>
+                              <span className="text-2xl">{b.icon}</span>
                            )}
                         </div>
                         <div className="flex-1 flex flex-col justify-center">
-                          <h3 className="font-bold text-slate-800 text-base">{b.name}</h3>
-                          <div className="flex gap-2 text-xs font-semibold mt-1">
+                          <h3 className="font-bold text-slate-800 text-sm">{b.name}</h3>
+                          <div className="flex gap-2 text-[11px] font-semibold mt-1">
                             <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">💰 {b.cost}萬</span>
                             <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded border border-red-200">維護: -{b.upkeep}</span>
                           </div>
@@ -673,13 +746,13 @@
                       <button 
                         onClick={() => handleBuild(b.id)}
                         disabled={budget < b.cost}
-                        className={`mt-2 w-full py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ${
+                        className={`mt-2 w-full py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${
                           budget >= b.cost 
                             ? 'bg-blue-600 text-white hover:bg-blue-700' 
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        {budget >= b.cost ? '確認興建' : '資金不足'}
+                        {budget >= b.cost ? '興建於此區域' : '資金不足'}
                       </button>
                     </div>
                   ))}
