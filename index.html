@@ -1,893 +1,1937 @@
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>天水圍新市鎮規劃模擬器</title>
-
-  <!-- React & ReactDOM CDNs -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-
-  <!-- Babel Standalone CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 min-h-screen text-slate-800">
-  <div id="root"></div>
-
-  <script type="text/babel">
-    const { useState, useEffect } = React;
-
-    const MAX_TURNS = 8;
-    const INITIAL_BUDGET = 1000;
-    const TAX_REVENUE = 150;
-
-    const ZONES = [
-      { id: 0, name: '南部生活區', tag: '建議: 住宅/學校', icon: '🏡' },
-      { id: 1, name: '核心商業區', tag: '建議: 街市商場', icon: '🛒' },
-      { id: 2, name: '西部動脈區', tag: '建議: 綜合醫院', icon: '🏥' },
-      { id: 3, name: '南端交通樞紐', tag: '建議: 屯馬線鐵路', icon: '🚆' },
-      { id: 4, name: '中央綠肺區', tag: '建議: 市鎮公園', icon: '🦆' },
-      { id: 5, name: '北部后海灣生態區', tag: '建議: 濕地公園', icon: '🌳' }
-    ];
-
-    const playSFX = (type) => {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        if (type === 'build') {
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.15);
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-        } else if (type === 'correct') {
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.35);
-        } else if (type === 'wrong') {
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(220, ctx.currentTime);
-          osc.frequency.setValueAtTime(164.81, ctx.currentTime + 0.15);
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.35);
-        }
-      } catch (e) {}
-    };
-
-    const FAMILY_MEMBERS = [
-      { id: 'dad', name: '爸爸 (上班族)', needs: '交通', icon: '👔', avatarHappy: 'avatar_father_happy.png', avatarSad: 'avatar_father_stressed.png' },
-      { id: 'mom', name: '媽媽 (主婦)', needs: '購物', icon: '👜', avatarHappy: 'avatar_mother_satisfied.png', avatarSad: 'avatar_mother_worried.png' },
-      { id: 'grandpa', name: '爺爺 (長者)', needs: '醫療/休閒', icon: '👴', avatarHappy: 'avatar_grandfather_healthy.png', avatarSad: 'avatar_grandfather_sick.png' },
-      { id: 'boy', name: '哥哥小皇', needs: '教育/玩樂', icon: '👦', avatarHappy: 'avatar_child_joyful.png', avatarSad: 'avatar_child_bored.png' },
-      { id: 'girl', name: '妹妹小英', needs: '環境/自然', icon: '👧', avatarHappy: 'avatar_child_joyful.png', avatarSad: 'avatar_child_bored.png' }
-    ];
-
-    const BUILDINGS = {
-      housing: { id: 'housing', name: '公共屋邨', cost: 150, upkeep: 10, icon: '🏢', img: 'building logo.png', desc: '基礎居住設施。全家人心情+10', color: 'bg-blue-100/90 border-blue-400 text-blue-700' },
-      transport: { id: 'transport', name: '交通樞紐', cost: 250, upkeep: 20, icon: '🚆', img: 'train logo.png', desc: '解決跨區通勤問題。爸爸+40, 媽媽+20, 經濟+15', color: 'bg-slate-100/90 border-slate-400 text-slate-700' },
-      commercial: { id: 'commercial', name: '大型街市', cost: 200, upkeep: 15, icon: '🛒', img: 'market logo.png', desc: '滿足日常購買食材的需要。媽媽+40, 經濟+30, 環境-10', color: 'bg-yellow-100/90 border-yellow-400 text-yellow-700' },
-      hospital: { id: 'hospital', name: '綜合醫院', cost: 300, upkeep: 30, icon: '🏥', img: 'hospital logo.png', desc: '應付醫療需求。爺爺+50, 全家人+5', color: 'bg-red-50/90 border-red-400 text-red-700' },
-      school: { id: 'school', name: '中小學校網', cost: 200, upkeep: 15, icon: '🏫', img: null, desc: '原區就學。哥哥+40, 妹妹+40', color: 'bg-orange-100/90 border-orange-400 text-orange-700' },
-      park: { id: 'park', name: '濕地保育公園', cost: 150, upkeep: 10, icon: '🌳', img: 'wetland logo.png', desc: '保護生態。妹妹+30, 爺爺+20, 環境+40', color: 'bg-emerald-100/90 border-emerald-400 text-emerald-700' },
-      pond: { id: 'pond', name: '市鎮公園', cost: 100, upkeep: 5, icon: '🦆', img: 'pond logo.png', desc: '休憩空間。全家人心情+5', color: 'bg-green-100/90 border-green-400 text-green-700' }
-    };
-
-    const QUIZ_POOL = [
-      {
-        question: "【歷史與地理】天水圍在發展成新市鎮之前，主要是什麼地形？",
-        options: [
-          { text: "主要是高山與森林", correct: false, feedback: "不對。天水圍早期並沒有高山。" },
-          { text: "主要是低窪魚塘與濕地", correct: true, feedback: "答對了！天水圍原為低窪濕地魚塘，發展時需兼顧生態平衡。" },
-          { text: "主要是商業高樓集中地", correct: false, feedback: "不對。發展前這裡主要是鄉郊地區。" }
-        ]
-      },
-      {
-        question: "【居民觀察】如果居民每天要花兩小時跨區到港島上班，會帶來什麼影響？",
-        options: [
-          { text: "增加居民車費開支與時間成本，生活質素下降", correct: true, feedback: "答對了！交通不便會嚴重影響居民的作息和心情。" },
-          { text: "完全沒有影響，居民都很享受乘坐長途車", correct: false, feedback: "長途通勤會令人身心疲倦呢！" }
-        ]
-      },
-      {
-        question: "【發展與保育】興建大型購物商場雖然能方便購物，但可能會帶來什麼負面影響？",
-        options: [
-          { text: "增加綠化面積，改善空氣質素", correct: false, feedback: "商業發展通常會佔用土地，並減少綠化空間。" },
-          { text: "產生較多廢物與噪音，影響原有的自然環境", correct: true, feedback: "答對了！發展經濟與保護環境往往需要取得平衡。" }
-        ]
-      }
-    ];
-
-    const generateRunQuizzes = () => {
-      const shuffled = [...QUIZ_POOL].sort(() => 0.5 - Math.random());
-      return { 2: shuffled[0], 4: shuffled[1], 6: shuffled[2] };
-    };
-
-    function App() {
-      const [showCover, setShowCover] = useState(true);
-      const [className, setClassName] = useState('4A');
-      const [studentName, setStudentName] = useState('陳小明');
-
-      const [turn, setTurn] = useState(1);
-      const [budget, setBudget] = useState(INITIAL_BUDGET);
-      const [plots, setPlots] = useState(Array(6).fill(null));
-      const [builtThisTurn, setBuiltThisTurn] = useState(false);
-      const [turnQuizzes, setTurnQuizzes] = useState(generateRunQuizzes());
-      
-      const [budgetPulse, setBudgetPulse] = useState(false);
-      
-      const [moods, setMoods] = useState({ dad: 50, mom: 50, grandpa: 50, boy: 50, girl: 50 });
-      const [env, setEnv] = useState(50);
-      const [econ, setEcon] = useState(30);
-      const [selectedPlot, setSelectedPlot] = useState(null);
-      const [log, setLog] = useState(["歡迎來到天水圍！請開始您的規劃。"]);
-      const [cooldown, setCooldown] = useState(0);
-      
-      const [modal, setModal] = useState({ isOpen: false, type: '', title: '', text: '', image: null, options: [] });
-      const [modalImgError, setModalImgError] = useState(false);
-      const [quizModal, setQuizModal] = useState({ isOpen: false, data: null, selectedOpt: null });
-      const [soundEnabled, setSoundEnabled] = useState(true);
-
-      const triggerSFX = (type) => { if (soundEnabled) playSFX(type); };
-      const addLog = (msg) => { setLog(prev => [msg, ...prev].slice(0, 50)); };
-
-      useEffect(() => {
-        if (cooldown > 0) {
-          const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
-          return () => clearTimeout(timer);
-        }
-      }, [cooldown]);
-
-      const canAdvance = cooldown === 0;
-      
-      const openModal = (config) => {
-        setModalImgError(false);
-        setModal({ isOpen: true, ...config });
-      };
-
-      const closeModal = () => {
-        setModalImgError(false);
-        setModal({ isOpen: false, type: '', title: '', text: '', image: null, options: [] });
-      };
-
-      const updateMoods = (changes) => {
-        setMoods(prev => {
-          let newMoods = { ...prev };
-          for (const [key, val] of Object.entries(changes)) {
-            if (newMoods[key] !== undefined) {
-              newMoods[key] = Math.max(0, Math.min(100, newMoods[key] + val));
-            }
-          }
-          return newMoods;
-        });
-      };
-
-      const updateStats = (envChange, econChange) => {
-        setEnv(prev => Math.max(0, Math.min(100, prev + envChange)));
-        setEcon(prev => Math.max(0, Math.min(100, prev + econChange)));
-      };
-
-      const handleBuild = (buildingKey) => {
-        const building = BUILDINGS[buildingKey];
-        if (budget < building.cost) {
-          triggerAlert("預算不足", `您需要 ${building.cost} 資金來興建 ${building.name}。`);
-          return;
-        }
-
-        setBudget(prev => prev - building.cost);
-        let newPlots = [...plots];
-        newPlots[selectedPlot] = buildingKey;
-        setPlots(newPlots);
-
-        const zoneName = ZONES[selectedPlot].name;
-        setSelectedPlot(null);
-        setBuiltThisTurn(true);
-        triggerSFX('build');
-
-        let moodChanges = {};
-        if (buildingKey === 'housing') moodChanges = { dad: 10, mom: 10, grandpa: 10, boy: 10, girl: 10 };
-        if (buildingKey === 'transport') { moodChanges = { dad: 40, mom: 20 }; updateStats(0, 15); }
-        if (buildingKey === 'commercial') { moodChanges = { mom: 40 }; updateStats(-10, 30); }
-        if (buildingKey === 'hospital') { moodChanges = { grandpa: 50, dad: 5, mom: 5, boy: 5, girl: 5 }; }
-        if (buildingKey === 'school') { moodChanges = { boy: 40, girl: 40 }; }
-        if (buildingKey === 'park') { moodChanges = { girl: 30, grandpa: 20 }; updateStats(40, 0); }
-
-        updateMoods(moodChanges);
-        addLog(`[建設] 在【${zoneName}】興建了 ${building.name}！`);
-      };
-
-      const handleEndTurnClick = () => {
-        if (!builtThisTurn && plots.includes(null) && budget >= 150) {
-          openModal({
-            type: 'warning',
-            title: "⚠️ 警告：本年度未有任何規劃！",
-            text: "您今年完全沒有興建任何設施！直接跳過年份會導致居民失望且心情下降。您確定要直接結束本年嗎？",
-            image: null,
-            options: [
-              { label: "返回規劃（建議）", action: closeModal, color: "bg-blue-600 hover:bg-blue-700" },
-              { label: "堅持跳過今年", action: () => { closeModal(); checkQuizOrAdvance(); }, color: "bg-gray-500 hover:bg-gray-600" }
-            ]
-          });
-          return;
-        }
-        checkQuizOrAdvance();
-      };
-
-      const checkQuizOrAdvance = () => {
-        if (turnQuizzes[turn]) {
-          setQuizModal({ isOpen: true, data: turnQuizzes[turn], selectedOpt: null });
-        } else {
-          processAdvanceTurn();
-        }
-      };
-
-      const processAdvanceTurn = () => {
-        if (!builtThisTurn) {
-          updateMoods({ dad: -10, mom: -10, grandpa: -10, boy: -10, girl: -10 });
-          addLog("⚠️ 由於今年缺乏規劃，陳氏一家感到極度失望 (心情-10)。");
-        }
-
-        setBuiltThisTurn(false);
-        setCooldown(5);
-
-        let totalUpkeep = 0;
-        plots.forEach(p => { if (p) totalUpkeep += BUILDINGS[p].upkeep; });
-
-        const netIncome = TAX_REVENUE - totalUpkeep;
-        const newBudget = budget + netIncome;
-        setBudget(newBudget);
-
-        setBudgetPulse(true);
-        setTimeout(() => setBudgetPulse(false), 1200);
-
-        updateMoods({ dad: -5, mom: -5, grandpa: -5, boy: -5, girl: -5 });
-        
-        if (newBudget < 0) {
-          triggerEndGame('bankrupt');
-          return;
-        }
-
-        const nextYear = turn + 1;
-        setTurn(nextYear);
-        addLog(`[第${nextYear}年] 收取稅收 +${TAX_REVENUE}，設施維護費 -${totalUpkeep}。`);
-
-        if (nextYear > MAX_TURNS) {
-          triggerEndGame('normal');
-          return;
-        }
-
-        if (nextYear === 2) {
-          if (!plots.includes('transport')) {
-            updateMoods({ dad: -25 });
-            triggerAlert("⚠️ 青山公路大塞車", "公路嚴重塞車，巴士站大排長龍！爸爸上班經常遲到。(爸爸心情大跌)", "event_traffic_jam.png");
-          }
-        } else if (nextYear === 3) {
-          if (!plots.includes('school')) {
-            updateMoods({ boy: -30, girl: -30 });
-            triggerAlert("⚠️ 跨區上學之苦", "小皇和小英每天要花兩小時跨區上學，身心俱疲！(哥哥、妹妹心情大跌)", "event_cross_district_school.png");
-          }
-        } else if (nextYear === 4) {
-          if (!plots.includes('hospital')) {
-            updateMoods({ grandpa: -30 });
-            triggerAlert("⚠️ 冬季流感小診所癱瘓", "季節性流感爆發，街角診所擠滿病人，長者就醫困難！(爺爺心情下降)", "event_winter_flu_clinic.png");
-          }
-        } else if (nextYear === 5) {
-          if (!plots.includes('hospital')) {
-            updateMoods({ grandpa: -40 });
-            triggerAlert("⚠️ 深夜心絞痛急救事件", "爺爺半夜胸口不適！由於區內缺乏急症綜合醫院，急救車需跨區長途狂飆！", "event_midnight_emergency.png");
-          }
-        } else if (nextYear === 6) {
-          triggerConservationDilemma();
-        } else if (nextYear === 7) {
-          if (plots.includes('pond') || plots.includes('park')) {
-            updateMoods({ dad: 15, mom: 15, grandpa: 15, boy: 20, girl: 20 });
-            triggerAlert("🚴 天水圍單車節嘉年華", "全家人在公園湖畔與綠樹下騎單車野餐，共度歡樂時光！", "event_park_cycling_festival.png");
-          }
-        } else if (nextYear === 8) {
-          if (plots.includes('park')) {
-            updateMoods({ girl: 30 });
-            updateStats(20, 0);
-            triggerAlert("𓅞 黑臉琵鷺降臨濕地", "珍稀黑臉琵鷺飛抵天水圍濕地公園！展現發展與保育和諧共存的奇蹟！", "event_spoonbill_arrival.png");
-          }
-        }
-      };
-
-      const triggerConservationDilemma = () => {
-        openModal({
-          type: 'dilemma',
-          title: "⚖️ 發展與保育的抉擇",
-          text: "有地產商提議出資500萬填平魚塘發展豪宅高樓，這會帶來巨額收入，但會破壞自然生態。您會如何選擇？",
-          image: "event_fishpond_dilemma.png",
-          options: [
-            {
-              label: "發展豪宅 (資金+300, 環境-40, 妹妹-20)",
-              action: () => {
-                setBudget(prev => prev + 300);
-                updateStats(-40, 20);
-                updateMoods({ girl: -20 });
-                addLog("決定：選擇發展豪宅，獲得資金，但犧牲了生態環境。");
-                closeModal();
-              },
-              color: "bg-amber-600 hover:bg-amber-700"
-            },
-            {
-              label: "保育濕地 (資金-100, 環境+40, 妹妹+20)",
-              action: () => {
-                setBudget(prev => prev - 100);
-                updateStats(40, -10);
-                updateMoods({ girl: 20 });
-                addLog("決定：選擇保育濕地，堅持可持續發展，環境大幅改善。");
-                closeModal();
-              },
-              color: "bg-emerald-600 hover:bg-emerald-700"
-            }
-          ]
-        });
-      };
-
-      const triggerEndGame = (reason) => {
-        let title = "";
-        let desc = "";
-        let endingImg = null;
-        
-        if (reason === 'bankrupt') {
-          title = "❌ 破產免職！";
-          desc = `${className} ${studentName} 署長耗盡了所有城市建設基金，無力支付設施維護費。天水圍新市鎮計劃宣告失敗。`;
-          endingImg = "bg_ending_concrete_jungle.png";
-        } else {
-          const avgMood = Object.values(moods).reduce((a, b) => a + b, 0) / 5;
-          if (avgMood >= 70 && env >= 60) {
-            title = "🏆 五星級自給自足典範城！";
-            desc = `太棒了，${className} ${studentName} 署長！您成功平衡了各方需求，天水圍成為了兼具綠色生態與完善設施的夢幻新市鎮！陳氏一家非常幸福！`;
-            endingImg = "bg_ending_ideal_town.png";
-          } else if (avgMood >= 50 && env < 40) {
-            title = "🏢 水泥森林浩劫";
-            desc = `雖然 ${studentName} 署長解決了部分民生需求，但過度發展導致環境被破壞。這是一座失去靈魂的水泥森林，居民感到壓抑。`;
-            endingImg = "bg_ending_concrete_jungle.png";
-          } else if (avgMood < 50) {
-            title = "🥺 悲情城市... 孤島睡城";
-            desc = "設施嚴重不足，居民生活充滿怨言。跨區通勤與醫療短缺讓這個家庭苦不堪言，規劃有待改善。";
-            endingImg = "bg_ending_traffic_gridlock.png";
-          } else {
-            title = "✅ 發展中新市鎮";
-            desc = `恭喜 ${className} ${studentName} 署長完成了8年的任期！天水圍有了一定的發展，但仍有進步空間。感謝您的努力！`;
-            endingImg = "bg_ending_ideal_town.png";
-          }
-        }
-
-        openModal({
-          type: 'end',
-          title: title,
-          text: desc,
-          image: endingImg,
-          options: [{ label: "重新開始遊戲", action: resetGame, color: "bg-blue-600 hover:bg-blue-700" }]
-        });
-      };
-
-      const resetGame = () => {
-        setTurn(1);
-        setBudget(INITIAL_BUDGET);
-        setPlots(Array(6).fill(null));
-        setMoods({ dad: 50, mom: 50, grandpa: 50, boy: 50, girl: 50 });
-        setEnv(50);
-        setEcon(30);
-        setBuiltThisTurn(false);
-        setCooldown(5);
-        setTurnQuizzes(generateRunQuizzes());
-        setLog([`遊戲已重置。歡迎 ${className} ${studentName} 署長開始您的新任期！`]);
-        closeModal();
-      };
-
-      const triggerAlert = (title, text, image = null) => {
-        openModal({
-          type: 'alert',
-          title: title,
-          text: text,
-          image: image,
-          options: [{ label: "確認", action: closeModal, color: "bg-blue-600 hover:bg-blue-700" }]
-        });
-      };
-
-      const MoodBar = ({ val }) => {
-        let color = 'bg-red-500';
-        if (val > 40) color = 'bg-yellow-400';
-        if (val > 70) color = 'bg-green-500';
-        return (
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1 border border-gray-300 shadow-inner">
-            <div className={`${color} h-2.5 rounded-full transition-all duration-500`} style={{ width: `${val}%` }}></div>
-          </div>
-        );
-      };
-
-      if (showCover) {
-        return (
-          <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col justify-between p-4 md:p-8 relative overflow-hidden">
-            <div 
-              className="absolute inset-0 bg-cover bg-center opacity-35 pointer-events-none" 
-              style={{ backgroundImage: `url('bg_game_cover_title.png'), url('bg_tin_shui_wai_map.png')` }}
-            ></div>
-            <div className="absolute -top-32 -left-32 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
-
-            <header className="max-w-4xl mx-auto w-full flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700/80 shadow-lg z-10">
-              <div className="flex items-center gap-3">
-                <div className="bg-emerald-500 text-slate-900 text-2xl p-2.5 rounded-xl font-black shadow-md">
-                  🏫
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-emerald-400 tracking-wide">英皇書院同學會小學</h2>
-                  <p className="text-xs text-slate-400">小學人文科 | 環境與我</p>
-                </div>
-              </div>
-            </header>
-
-            <main className="max-w-xl mx-auto w-full my-auto py-8 flex flex-col items-center text-center z-10 bg-slate-800/90 backdrop-blur-md p-8 rounded-3xl border border-slate-700 shadow-2xl">
-              <div className="inline-block bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold px-4 py-1.5 rounded-full text-sm mb-4">
-                第2課：發展與保育
-              </div>
-
-              <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight drop-shadow-md">
-                🏗️ 建設理想天水圍
-              </h1>
-              <p className="text-slate-300 text-sm md:text-base mb-6 font-medium">
-                成為天水圍新市鎮首席規劃署長！
-              </p>
-
-              <div className="w-full bg-slate-900/80 p-5 rounded-2xl border border-slate-700/80 mb-6 text-left">
-                <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  👤 規劃署長身份登記
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1 font-semibold">班別</label>
-                    <input 
-                      type="text" 
-                      value={className} 
-                      onChange={(e) => setClassName(e.target.value)}
-                      placeholder="例: 4A"
-                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1 font-semibold">學生姓名</label>
-                    <input 
-                      type="text" 
-                      value={studentName} 
-                      onChange={(e) => setStudentName(e.target.value)}
-                      placeholder="例: 陳小明"
-                      className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowCover(false);
-                  addLog(`歡迎 ${className} ${studentName} 署長就任！請開始您的規劃。`);
-                }}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-lg font-extrabold py-4 rounded-2xl shadow-xl transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                🚀 接受任命．開始規劃
-              </button>
-            </main>
-
-            <footer className="max-w-4xl mx-auto w-full text-center z-10 pt-4 border-t border-slate-800">
-              <p className="text-slate-500 text-xs">
-                由英皇書院同學會小學人文科編製
-              </p>
-            </footer>
-          </div>
-        );
-      }
-
-      return (
-        <div className="min-h-screen bg-slate-100 font-sans text-slate-800 flex flex-col">
-          <header className="bg-emerald-700 text-white p-4 shadow-md flex justify-between items-center z-10 relative">
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setShowCover(true)}
-                className="bg-emerald-800 hover:bg-emerald-900 text-emerald-100 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 border border-emerald-600 transition"
-              >
-                📖 封面簡介
-              </button>
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className="bg-emerald-800 hover:bg-emerald-900 text-emerald-100 p-2 rounded-lg text-xs font-semibold border border-emerald-600 transition"
-              >
-                {soundEnabled ? '🔊 音效開' : '🔇 音效關'}
-              </button>
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-wider flex items-center gap-2">
-                  🏛️ 天水圍新市鎮規劃模擬器
-                </h1>
-                <p className="text-emerald-200 text-xs md:text-sm font-medium">
-                  署長: <span className="text-yellow-300 font-bold">{className} {studentName}</span> | 英皇書院同學會小學
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-6 items-center bg-emerald-800/50 p-2 rounded-lg border border-emerald-600/50 shadow-inner">
-              <div className="text-center">
-                <div className="text-xs text-emerald-200 uppercase tracking-wider font-semibold">當前年份</div>
-                <div className="text-2xl font-black">{turn} <span className="text-base font-normal">/ {MAX_TURNS}</span></div>
-              </div>
-              <div className="w-px h-10 bg-emerald-600/50"></div>
-              
-              <div className="text-center relative">
-                <div className="text-xs text-emerald-200 uppercase tracking-wider font-semibold">建設基金</div>
-                <div className={`text-2xl font-black transition-transform duration-300 ${budgetPulse ? 'scale-125 text-yellow-100' : ''} ${budget < 200 ? 'text-red-300' : 'text-yellow-300'}`}>
-                  💰 {budget} <span className="text-xs font-normal">萬</span>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <main className="flex-1 flex flex-col md:flex-row overflow-hidden max-w-7xl mx-auto w-full shadow-2xl bg-white">
-            <aside className="w-full md:w-80 bg-slate-100 p-5 border-r border-slate-200 overflow-y-auto flex flex-col gap-6">
-              <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                   <span className="text-blue-500">🏠</span> 陳氏一家心情
-                </h2>
-                <div className="space-y-4">
-                  {FAMILY_MEMBERS.map(member => {
-                    const currentMood = moods[member.id];
-                    const avatarSrc = currentMood > 50 ? member.avatarHappy : member.avatarSad;
-                    return (
-                      <div key={member.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-white border border-slate-200 overflow-hidden shadow-sm flex-shrink-0">
-                          <img 
-                            src={avatarSrc} 
-                            alt={member.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              if (e.target.parentNode) {
-                                e.target.parentNode.innerHTML = `<span class="text-2xl">${member.icon}</span>`;
-                              }
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="font-semibold">{member.name}</span>
-                            <span className="text-slate-500 text-xs">重視:{member.needs}</span>
-                          </div>
-                          <MoodBar val={currentMood} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                   <span className="text-emerald-500">📊</span> 城市指標
-                </h2>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm font-semibold mb-1">
-                      <span className="text-emerald-700">🌲 生態環境</span>
-                      <span>{env}/100</span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 shadow-inner">
-                      <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${env}%` }}></div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm font-semibold mb-1">
-                      <span className="text-yellow-600">📈 經濟繁榮</span>
-                      <span>{econ}/100</span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 shadow-inner">
-                      <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${econ}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </aside>
-
-            {/* In-Game Gameplay Map Area with Dynamic Background */}
-            <section 
-              className="flex-1 p-6 flex flex-col relative overflow-hidden bg-cover bg-center"
-              style={{
-                backgroundImage: `linear-gradient(rgba(241, 245, 249, 0.82), rgba(241, 245, 249, 0.82)), url('bg_tin_shui_wai_map.png'), url('bg_game_cover_title.png')`
-              }}
-            >
-              <div className="flex justify-between items-center mb-6 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-sm border border-slate-300/80 z-10">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-                   🗺️ 6大特色分區地圖
-                </h2>
-                <button 
-                  onClick={handleEndTurnClick}
-                  disabled={!canAdvance}
-                  className={`px-6 py-2 rounded-lg font-bold shadow-md transform transition active:scale-95 flex items-center gap-2 ${
-                    canAdvance 
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' 
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed border border-slate-400'
-                  }`}
-                >
-                  {canAdvance ? "⏳ 結束本年 (進入下一年)" : `🔍 觀察規劃中 (${cooldown}s)`}
-                </button>
-              </div>
-              
-              <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 items-center justify-center p-2 z-10">
-                {ZONES.map((zone, idx) => {
-                  const plot = plots[idx];
-                  return (
-                    <div 
-                      key={idx} 
-                      onClick={() => !plot && setSelectedPlot(idx)}
-                      className={`
-                        aspect-square rounded-2xl flex flex-col items-center justify-between p-3 cursor-pointer transition-all duration-300 relative shadow-md overflow-hidden backdrop-blur-sm
-                        ${plot 
-                          ? BUILDINGS[plot].color + ' shadow-lg transform hover:-translate-y-1 border-4' 
-                          : selectedPlot === idx 
-                            ? 'bg-blue-100/90 border-4 border-blue-500 shadow-inner' 
-                            : 'bg-emerald-50/85 border-4 border-dashed border-emerald-300/90 hover:bg-emerald-100/90 hover:border-emerald-400'
-                        }
-                      `}
-                    >
-                      <div className="w-full flex justify-between items-center bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-xs z-10 border border-slate-200/60">
-                        <span className="text-xs font-black text-slate-700 flex items-center gap-1">
-                          📍 {zone.name}
-                        </span>
-                        <span className="text-[10px] text-slate-500 font-semibold">{zone.icon}</span>
-                      </div>
-
-                      {plot ? (
-                        <>
-                          <div className="flex flex-col items-center justify-center my-auto z-10">
-                            {BUILDINGS[plot].img ? (
-                              <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center">
-                                <img 
-                                  src={BUILDINGS[plot].img} 
-                                  alt={BUILDINGS[plot].name} 
-                                  className="max-w-full max-h-full object-contain rounded-xl opacity-90 drop-shadow-md"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    if (e.target.parentNode) {
-                                      e.target.parentNode.innerHTML = `<span class="text-4xl md:text-5xl filter drop-shadow-md">${BUILDINGS[plot].icon}</span>`;
-                                    }
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <span className="text-4xl md:text-5xl filter drop-shadow-md">{BUILDINGS[plot].icon}</span>
-                            )}
-                          </div>
-                          <span className="font-bold text-center text-xs bg-white/90 px-2 py-0.5 rounded-full z-10 shadow-sm">{BUILDINGS[plot].name}</span>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center my-auto z-10 text-center">
-                          <span className={`text-3xl ${selectedPlot === idx ? 'text-blue-500' : 'text-emerald-500/70'}`}>+</span>
-                          <span className={`text-xs mt-1 font-bold ${selectedPlot === idx ? 'text-blue-600' : 'text-emerald-700'}`}>
-                            {selectedPlot === idx ? '已選取此地塊' : '點擊選擇建設'}
-                          </span>
-                          <span className="text-[10px] text-slate-500 mt-0.5 font-medium">{zone.tag}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 bg-slate-900/95 backdrop-blur-md text-green-400 p-3 rounded-xl shadow-inner border border-slate-700 h-32 overflow-y-auto font-mono text-xs z-10">
-                {log.map((msg, i) => (
-                  <div key={i} className={`mb-1 ${i === 0 ? 'text-white font-bold' : 'opacity-75'}`}>
-                    {msg}
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {selectedPlot !== null && (
-              <aside className="w-full md:w-80 bg-white p-5 border-l border-slate-200 flex flex-col shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)] z-20">
-                <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-800">🏗️ 建設清單</h2>
-                    <p className="text-xs text-emerald-600 font-semibold">目標：{ZONES[selectedPlot].name}</p>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedPlot(null)}
-                    className="text-slate-400 hover:text-red-500 text-2xl leading-none"
-                  >
-                    &times;
-                  </button>
-                </div>
-                
-                <div className="space-y-3 overflow-y-auto pr-1 pb-4">
-                  {Object.values(BUILDINGS).map(b => (
-                    <div key={b.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl hover:shadow-md transition-shadow">
-                      <div className="flex gap-3">
-                        <div className={`w-14 h-14 flex-shrink-0 flex items-center justify-center rounded-lg border bg-white overflow-hidden shadow-inner ${b.color.split(' ')[1]}`}>
-                           {b.img ? (
-                              <img 
-                                src={b.img} 
-                                alt={b.name} 
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  if (e.target.parentNode) {
-                                    e.target.parentNode.innerHTML = `<span class="text-2xl">${b.icon}</span>`;
-                                  }
-                                }} 
-                              />
-                           ) : (
-                              <span className="text-2xl">{b.icon}</span>
-                           )}
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center">
-                          <h3 className="font-bold text-slate-800 text-sm">{b.name}</h3>
-                          <div className="flex gap-2 text-[11px] font-semibold mt-1">
-                            <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">💰 {b.cost}萬</span>
-                            <span className="bg-red-50 text-red-700 px-1.5 py-0.5 rounded border border-red-200">維護: -{b.upkeep}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-600 mt-2 bg-white p-2 rounded border border-slate-100 leading-relaxed">
-                        {b.desc}
-                      </p>
-                      <button 
-                        onClick={() => handleBuild(b.id)}
-                        disabled={budget < b.cost}
-                        className={`mt-2 w-full py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${
-                          budget >= b.cost 
-                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {budget >= b.cost ? '興建於此區域' : '資金不足'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </aside>
-            )}
-          </main>
-
-          {quizModal.isOpen && (
-            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-100">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-lg mb-2">
-                  🧠 年度人文科思考檢討
-                </div>
-                <p className="text-slate-800 text-base font-semibold mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                  {quizModal.data.question}
-                </p>
-
-                <div className="space-y-3 mb-6">
-                  {quizModal.data.options.map((opt, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setQuizModal(prev => ({ ...prev, selectedOpt: opt }));
-                        triggerSFX(opt.correct ? 'correct' : 'wrong');
-                      }}
-                      className={`w-full p-3 rounded-xl border text-left text-sm font-medium transition-all ${
-                        quizModal.selectedOpt === opt 
-                          ? (opt.correct ? 'bg-green-100 border-green-500 text-green-900' : 'bg-red-100 border-red-500 text-red-900')
-                          : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {opt.text}
-                    </button>
-                  ))}
-                </div>
-
-                {quizModal.selectedOpt && (
-                  <div className={`p-3 rounded-xl text-xs font-bold mb-4 ${quizModal.selectedOpt.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {quizModal.selectedOpt.feedback}
-                  </div>
-                )}
-
-                <div className="flex justify-end">
-                  <button
-                    disabled={!quizModal.selectedOpt}
-                    onClick={() => {
-                      setQuizModal({ isOpen: false, data: null, selectedOpt: null });
-                      processAdvanceTurn();
-                    }}
-                    className={`px-6 py-2 rounded-xl text-white font-bold text-sm ${
-                      quizModal.selectedOpt 
-                        ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' 
-                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                    }`}
-                  >
-                    完成思考，進入下一年 ➔
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Universal Modal Overlay with Dynamic Fallback Header */}
-          {modal.isOpen && (
-            <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100">
-                
-                {/* Event Hero Picture or Dynamic Gradient Banner */}
-                {modal.image && !modalImgError ? (
-                  <div className="w-full h-48 md:h-56 bg-slate-800 relative overflow-hidden flex items-center justify-center">
-                    <img
-                      src={modal.image}
-                      alt={modal.title}
-                      className="w-full h-full object-cover"
-                      onError={() => setModalImgError(true)}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/30 to-transparent"></div>
-                    <div className="absolute bottom-3 left-4 right-4 text-white font-black text-lg drop-shadow-md flex items-center gap-2">
-                      {modal.type === 'end' ? '📊 最終任期報告' : '📰 社區事件'}
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`w-full py-6 px-6 bg-gradient-to-r flex items-center justify-between border-b ${
-                    modal.type === 'dilemma' 
-                      ? 'from-amber-500 to-orange-600 text-white' 
-                      : modal.type === 'end' 
-                        ? 'from-indigo-600 to-blue-700 text-white' 
-                        : 'from-emerald-600 to-teal-700 text-white'
-                  }`}>
-                    <div className="font-extrabold text-xl flex items-center gap-2">
-                      {modal.type === 'dilemma' && '⚖️ 政策抉擇考驗'}
-                      {modal.type === 'end' && '🏆 規劃任期報告'}
-                      {modal.type === 'alert' && '📰 社區緊急動態'}
-                      {modal.type === 'warning' && '⚠️ 規劃提醒'}
-                    </div>
-                    <span className="text-3xl opacity-80">
-                      {modal.type === 'dilemma' ? '🏞️' : modal.type === 'end' ? '🏛️' : '📣'}
-                    </span>
-                  </div>
-                )}
-
-                <div className="p-6">
-                  <h3 className={`text-2xl font-black mb-3 border-b pb-2 ${modal.type === 'warning' ? 'text-amber-600 border-amber-100' : 'text-slate-800 border-slate-100'}`}>
-                    {modal.title}
-                  </h3>
-                  <p className="text-slate-600 text-base mb-6 leading-relaxed">
-                    {modal.text}
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    {modal.options.map((opt, i) => (
-                      <button
-                        key={i}
-                        onClick={opt.action}
-                        className={`w-full py-3.5 px-4 rounded-xl text-white font-bold text-base shadow-md transition-transform transform active:scale-95 cursor-pointer ${opt.color}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>天水圍奇蹟：陳氏一家自給自足大冒險——四年級人文科新市鎮模擬器</title>
+  <style>
+    :root {
+      --primary: #1e5aa0;
+      --primary-light: #e8f1fb;
+      --secondary: #2e8540;
+      --secondary-light: #eaf5ec;
+      --accent: #e67e22;
+      --accent-light: #fef5ec;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --dark: #1e293b;
+      --gray: #64748b;
+      --border: #cbd5e1;
+      --font: -apple-system, BlinkMacSystemFont, "PingFang HK", "Microsoft JhengHei", sans-serif;
     }
 
-    const container = document.getElementById('root');
-    const root = ReactDOM.createRoot(container);
-    root.render(<App />);
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100vh;
+      overflow: hidden; /* 保證視窗 100vh 完全免滾動 */
+      font-family: var(--font);
+      background: #0f172a;
+      color: var(--dark);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 頂部常駐狀態列 (50px) */
+    header {
+      background: linear-gradient(135deg, #1e5aa0 0%, #157347 100%);
+      color: white;
+      padding: 6px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 50px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .school-pill {
+      background: rgba(255,255,255,0.22);
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .game-title-text {
+      font-size: 0.95rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .header-stats {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .stat-badge {
+      background: rgba(0,0,0,0.28);
+      padding: 3px 8px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* 主舞台容器 */
+    main {
+      flex: 1;
+      height: calc(100vh - 50px);
+      position: relative;
+      overflow: hidden;
+      background: #f8fafc;
+    }
+
+    .view-screen {
+      display: none;
+      width: 100%;
+      height: 100%;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .view-screen.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.99); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* 圖片容器與防破圖回退 (Graceful Fallback) */
+    .img-box {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+
+    .img-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .img-fallback {
+      display: none;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--gray);
+      font-size: 0.75rem;
+      background: #e2e8f0;
+      padding: 6px;
+    }
+
+    /* 畫面 1：封面 */
+    #screen-cover {
+      position: relative;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    .cover-bg {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+    }
+
+    .cover-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.88) 100%);
+      z-index: 2;
+    }
+
+    .cover-card {
+      position: relative;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      padding: 22px 30px;
+      border-radius: 20px;
+      max-width: 520px;
+      width: 90%;
+      text-align: center;
+      color: var(--dark);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      border: 2px solid rgba(255,255,255,0.8);
+    }
+
+    .cover-title {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--primary);
+      margin-bottom: 3px;
+    }
+
+    .cover-subtitle {
+      font-size: 0.88rem;
+      color: var(--secondary);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .cover-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 12px 0;
+      text-align: left;
+    }
+
+    .form-group label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--gray);
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 7px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+    }
+
+    .btn-start-game {
+      background: linear-gradient(135deg, #1e5aa0, #15803d);
+      color: white;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(30, 90, 160, 0.35);
+      transition: all 0.2s;
+      margin-top: 6px;
+    }
+
+    .btn-start-game:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(30, 90, 160, 0.45);
+    }
+
+    /* 畫面 2：序幕 */
+    #screen-prologue {
+      flex-direction: column;
+      padding: 12px;
+      background: #1e293b;
+      color: white;
+    }
+
+    .prologue-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 12px;
+      height: 100%;
+    }
+
+    .prologue-view {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #334155;
+    }
+
+    .prologue-dialogue-box {
+      background: white;
+      color: var(--dark);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid var(--border);
+    }
+
+    .speaker-tag {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .dialogue-text {
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: #334155;
+    }
+
+    /* 畫面 3：主遊戲 */
+    #screen-gameplay {
+      padding: 8px 12px;
+      gap: 8px;
+    }
+
+    .game-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 10px;
+      width: 100%;
+      height: 100%;
+    }
+
+    .game-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      height: 100%;
+    }
+
+    .sims-panel {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 8px;
+    }
+
+    .sims-family-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .sim-card {
+      background: #f8fafc;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 3px 2px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .sim-avatar-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: #e2e8f0;
+      border: 2px solid #cbd5e1;
+      margin-bottom: 2px;
+    }
+
+    .sim-avatar-circle img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .sim-name-label {
+      font-size: 0.65rem;
+      font-weight: 800;
+    }
+
+    .sim-mood-tag {
+      font-size: 0.58rem;
+      font-weight: 700;
+      padding: 1px 3px;
+      border-radius: 4px;
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    .mood-bad { background: #fee2e2; color: #b91c1c; }
+    .mood-good { background: #dcfce7; color: #15803d; }
+
+    .meters-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .meter-block {
+      background: #f8fafc;
+      padding: 3px 4px;
+      border-radius: 6px;
+      border-left: 3px solid var(--primary);
+      text-align: center;
+    }
+
+    .m-title { font-size: 0.62rem; color: var(--gray); font-weight: 700; }
+    .m-value { font-size: 0.9rem; font-weight: 900; }
+
+    .build-list-panel {
+      flex: 1;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+    }
+
+    .facility-card-item {
+      background: #f8fafc;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 3px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .facility-card-item.ready {
+      border-color: var(--accent);
+      background: #fffbeb;
+    }
+
+    .facility-card-item.upgraded {
+      border-color: var(--secondary);
+      background: #f0fdf4;
+    }
+
+    .f-logo-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: white;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .f-logo-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .f-info {
+      flex: 1;
+      line-height: 1.2;
+    }
+
+    .f-name {
+      font-size: 0.74rem;
+      font-weight: 800;
+      color: var(--dark);
+    }
+
+    .f-cost {
+      font-size: 0.65rem;
+      color: #d97706;
+      font-weight: 700;
+    }
+
+    .f-core-tag {
+      font-size: 0.62rem;
+      color: #dc2626;
+      font-weight: 800;
+    }
+
+    .btn-build-action {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .btn-build-action:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    /* 右側面板：地圖與動態大橫幅 */
+    .map-board-panel {
+      position: relative;
+      background: #d8ebd4;
+      border: 2px solid #cbd5e1;
+      border-radius: 12px;
+      overflow: hidden;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      transition: filter 0.5s ease;
+    }
+
+    .community-atmosphere-bar {
+      position: absolute;
+      top: 6px; left: 10px; right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(4px);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      z-index: 20;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .atmo-tag {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+    }
+    .atmo-gloomy { background: #fee2e2; color: #dc2626; }
+    .atmo-vibrant { background: #dcfce7; color: #15803d; }
+
+    /* 頂部動態大橫幅 (活用背景大圖) */
+    .zone-active-banner {
+      position: absolute;
+      top: 36px; left: 10px; right: 10px;
+      height: 90px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1.5px solid var(--border);
+      z-index: 15;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .zone-active-banner img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+
+    .banner-overlay-info {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(to top, rgba(15, 23, 42, 0.85), transparent);
+      color: white;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    /* 6 大選址格子 */
+    .zoning-grid-overlay {
+      position: absolute;
+      top: 132px; left: 10px; right: 10px; bottom: 36px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .zone-slot {
+      background: rgba(255, 255, 255, 0.7);
+      border: 2px dashed #64748b;
+      border-radius: 10px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .zone-slot:hover {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: var(--primary);
+    }
+
+    .zone-slot.built {
+      border: 2px solid var(--secondary);
+      background: rgba(240, 253, 244, 0.9);
+    }
+
+    .zone-badge-tag {
+      position: absolute;
+      top: 3px; left: 5px;
+      background: #1e293b;
+      color: white;
+      font-size: 0.6rem;
+      padding: 1px 5px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+
+    .zone-slot-img {
+      width: 58px;
+      height: 58px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 2px;
+    }
+
+    .zone-slot-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .zone-name-text {
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: var(--dark);
+    }
+
+    .map-footer-ticker {
+      position: absolute;
+      bottom: 6px; left: 10px; right: 10px;
+      background: rgba(15, 23, 42, 0.92);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 0.74rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 30;
+    }
+
+    /* 彈窗 */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(3px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+
+    .event-card-box {
+      background: white;
+      border-radius: 14px;
+      padding: 14px 18px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border-top: 5px solid var(--accent);
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.85); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .event-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .event-card-title {
+      font-size: 1rem;
+      font-weight: 900;
+      color: var(--dark);
+    }
+
+    .event-desc-p {
+      font-size: 0.8rem;
+      color: #334155;
+      line-height: 1.45;
+      margin: 6px 0;
+      background: #f8fafc;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+
+    .dilemma-btn-opt {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: #f8fafc;
+      font-size: 0.8rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-align: left;
+      margin-top: 5px;
+      transition: all 0.2s;
+    }
+
+    .dilemma-btn-opt:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    /* 畫面 5：結算證書 */
+    #screen-ending {
+      background: #f1f5f9;
+      padding: 12px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .certificate-card {
+      background: white;
+      border: 3px solid #f59e0b;
+      border-radius: 16px;
+      padding: 16px 24px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.12);
+      text-align: center;
+      position: relative;
+    }
+
+    .cert-title {
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: var(--primary);
+      margin-bottom: 3px;
+    }
+
+    .cert-honor-name {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: #b45309;
+      margin: 6px 0;
+    }
+
+    .cert-ratings {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .cert-rate-item {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 5px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部常駐狀態列 -->
+  <header>
+    <div class="header-left">
+      <span class="school-pill">英皇書院同學會小學｜四年級人文科</span>
+      <span class="game-title-text">🏙️ 天水圍奇蹟：陳氏一家自給自足大冒險</span>
+    </div>
+
+    <div class="header-stats">
+      <div class="stat-badge" style="background:#0284c7;">
+        <span>📅</span> <span id="hdr-year">第 1 年 (Year 1/8)</span>
+      </div>
+      <div class="stat-badge" style="background:#d97706;">
+        <span>💰 資金:</span> <span id="hdr-budget">1,000 萬</span>
+      </div>
+      <div class="stat-badge" style="background:#15803d;">
+        <span>🧑‍🤝‍🧑 人口:</span> <span id="hdr-pop">0 人</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- 畫面 1：封面與啟動 (Title Screen) -->
+    <div class="view-screen active" id="screen-cover">
+      <div class="cover-bg img-box">
+        <img src="bg_game_cover_title.png" alt="遊戲封面背景" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="img-fallback" style="background:linear-gradient(135deg, #1e5aa0, #15803d);">
+          <span style="font-size:3rem; color:white;">🏞️</span>
+          <strong style="color:white; font-size:1rem;">[bg_game_cover_title.png]</strong>
+          <span style="color:#e2e8f0;">陳氏一家在山丘眺望朝陽下的天水圍新市鎮</span>
+        </div>
+      </div>
+      <div class="cover-overlay"></div>
+
+      <div class="cover-card">
+        <h1 class="cover-title">天水圍奇蹟：自給自足大冒險</h1>
+        <div class="cover-subtitle">四年級人文科單元：發展新市鎮故事模擬器</div>
+        
+        <p style="font-size:0.8rem; color:#475569; line-height:1.5;">
+          陳氏一家（爸爸、媽媽、爺爺、小皇、小英）受夠了市區唐樓的狹窄劏房！<br>
+          政府撥款 1,000 萬元，委任你為天水圍規劃署長，
+          在 8 年內建立自給自足、連繫市區並守護濕地的現代新市鎮！
+        </p>
+
+        <div class="cover-form">
+          <div class="form-group">
+            <label>👤 規劃署長（學生姓名）：</label>
+            <input type="text" id="inp-student-name" class="form-input" placeholder="例如：陳小明" value="陳小明">
+          </div>
+          <div class="form-group">
+            <label>🏫 班別：</label>
+            <input type="text" id="inp-student-class" class="form-input" placeholder="例如：4A班" value="4A班">
+          </div>
+        </div>
+
+        <button class="btn-start-game" onclick="startGamePrologue()">
+          🚀 宣誓就任署長・開啟天水圍規劃 ➔
+        </button>
+      </div>
+    </div>
+
+
+    <!-- 畫面 2：故事序幕：逃離舊區唐樓 (Prologue Screen) -->
+    <div class="view-screen" id="screen-prologue">
+      <div class="prologue-layout">
+        
+        <div class="prologue-view img-box">
+          <img src="bg_old_subdivided_flat.png" alt="舊市區狹窄劏房" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="img-fallback" style="background:#334155; color:white;">
+            <span style="font-size:3rem;">🏚️</span>
+            <strong>[bg_old_subdivided_flat.png]</strong>
+            <span>窗外密密麻麻唐樓、室內雙層床、擁擠昏黃的舊區劏房</span>
+          </div>
+        </div>
+
+        <div class="prologue-dialogue-box">
+          <div>
+            <span class="speaker-tag" id="prologue-speaker">📢 城市規劃署長 (NPC)</span>
+            <h3 style="font-size:1.05rem; color:var(--primary); margin-bottom:6px;">第一章：陳氏一家的心願</h3>
+            <p class="dialogue-text" id="prologue-text">
+              「署長你好！陳氏一家（爸爸陳先生、媽媽陳太太、陳爺爺、小皇和小英）長年擠在九龍市區這間不到百呎的唐樓劏房中，
+              沒有升降機、空間擁擠、街道塞車空氣差。<br><br>
+              1980 年代政府推行新市鎮計劃，我們在天水圍平整了大片魚塘農地。
+              請你善用 1,000 萬基金，為陳氏一家建設一個自給自足的新市鎮！」
+            </p>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+            <div style="font-size:0.75rem; color:var(--gray);">
+              💡 核心目標：滿足家庭需求・建立自給自足市鎮
+            </div>
+            <button class="btn-build-action" style="padding:8px 16px; font-size:0.85rem;" onclick="enterMainGame()">
+              前往天水圍地圖 ➔
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- 畫面 3：主遊戲面板 (Main Town Simulation Board) -->
+    <div class="view-screen" id="screen-gameplay">
+      <div class="game-grid">
+        
+        <div class="game-sidebar">
+          
+          <div class="sims-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="font-size:0.74rem; color:var(--primary);">👨‍👩‍👧‍👦 陳氏一家心情 (The Sims)</strong>
+              <span style="font-size:0.68rem; color:#0284c7;">5位居民狀態</span>
+            </div>
+
+            <!-- 5 位家庭成員心情頭像 (包含小英 avatar_girl_sad/happy) -->
+            <div class="sims-family-row">
+              <div class="sim-card">
+                <div class="sim-avatar-circle">
+                  <img id="sim-av-father" src="avatar_father_stressed.png" alt="爸爸" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                  <div class="img-fallback">👨</div>
+                </div>
+                <div class="sim-name-label">爸爸</div>
+                <div class="sim-mood-tag mood-bad" id="sim-tag-father">塞車遲到</div>
+              </div>
+
+              <div class="sim-card">
+                <div class="sim-avatar-circle">
+                  <img id="sim-av-mother" src="avatar_mother_worried.png" alt="媽媽" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                  <div class="img-fallback">👩</div>
+                </div>
+                <div class="sim-name-label">媽媽</div>
+                <div class="sim-mood-tag mood-bad" id="sim-tag-mother">買餸好遠</div>
+              </div>
+
+              <div class="sim-card">
+                <div class="sim-avatar-circle">
+                  <img id="sim-av-grandpa" src="avatar_grandfather_sick.png" alt="爺爺" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                  <div class="img-fallback">👴</div>
+                </div>
+                <div class="sim-name-label">爺爺</div>
+                <div class="sim-mood-tag mood-bad" id="sim-tag-grandpa">求醫困難</div>
+              </div>
+
+              <div class="sim-card">
+                <div class="sim-avatar-circle">
+                  <img id="sim-av-boy" src="avatar_child_bored.png" alt="小皇" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                  <div class="img-fallback">👦</div>
+                </div>
+                <div class="sim-name-label">小皇</div>
+                <div class="sim-mood-tag mood-bad" id="sim-tag-boy">無學無玩</div>
+              </div>
+
+              <div class="sim-card">
+                <div class="sim-avatar-circle">
+                  <img id="sim-av-girl" src="avatar_girl_sad.png" alt="小英" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                  <div class="img-fallback">👧</div>
+                </div>
+                <div class="sim-name-label">小英</div>
+                <div class="sim-mood-tag mood-bad" id="sim-tag-girl">無聊發呆</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 大城市指標 -->
+          <div class="meters-row">
+            <div class="meter-block">
+              <div class="m-title">自給自足率</div>
+              <div class="m-value" style="color:#0284c7;"><span id="val-self-suff">15</span>%</div>
+            </div>
+            <div class="meter-block" style="border-color:#10b981;">
+              <div class="m-title">居民滿意度</div>
+              <div class="m-value" style="color:#15803d;"><span id="val-satisfaction">20</span>分</div>
+            </div>
+            <div class="meter-block" style="border-color:#f59e0b;">
+              <div class="m-title">對外連繫度</div>
+              <div class="m-value" style="color:#b45309;"><span id="val-transit">10</span>%</div>
+            </div>
+            <div class="meter-block" style="border-color:#8b5cf6;">
+              <div class="m-title">生態保育度</div>
+              <div class="m-value" style="color:#6d28d9;"><span id="val-ecology">50</span>分</div>
+            </div>
+          </div>
+
+          <!-- 設施建造升級列表 -->
+          <div class="build-list-panel">
+            <div style="font-size:0.72rem; font-weight:800; color:var(--dark); display:flex; justify-content:space-between;">
+              <span>🏗️ 設施規劃 (升級達到自給自足)：</span>
+              <span id="txt-upkeep-sum" style="color:#dc2626; font-size:0.68rem;">年維護費: -0萬</span>
+            </div>
+
+            <!-- 1. 住宅 -->
+            <div class="facility-card-item ready" id="fcard-1">
+              <div class="f-logo-thumb">
+                <img src="building logo.png" alt="住宅" onerror="this.style.display='none'; this.parentElement.innerHTML='🏢';">
+              </div>
+              <div class="f-info">
+                <div class="f-name">1. 天耀/天瑞屋苑</div>
+                <div class="f-cost">造價: -200萬 ｜ 維護: -10萬/年</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-1" onclick="buildFacility(1)">建造 ＋</button>
+            </div>
+
+            <!-- 2. 街市商場 -->
+            <div class="facility-card-item" id="fcard-2">
+              <div class="f-logo-thumb">
+                <img src="market logo.jpg" alt="街市" onerror="this.style.display='none'; this.parentElement.innerHTML='🥩';">
+              </div>
+              <div class="f-info">
+                <div class="f-name">2. 天盛街市＋置富商場</div>
+                <div class="f-cost">造價: -150萬 ｜ 維護: -15萬/年</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-2" disabled onclick="buildFacility(2)">建造 ＋</button>
+            </div>
+
+            <!-- 3. 醫院 (重點) -->
+            <div class="facility-card-item" id="fcard-3">
+              <div class="f-logo-thumb">
+                <img src="hospital logo.png" alt="醫院" onerror="this.style.display='none'; this.parentElement.innerHTML='🏥';">
+              </div>
+              <div class="f-info">
+                <div class="f-name" style="color:#dc2626;">3. 天水圍綜合醫院 ★</div>
+                <div class="f-core-tag">設急症室！不需出屯門求醫</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-3" disabled style="background:#dc2626;" onclick="buildFacility(3)">建造 ＋</button>
+            </div>
+
+            <!-- 4. 鐵路 (重點) -->
+            <div class="facility-card-item" id="fcard-4">
+              <div class="f-logo-thumb">
+                <img src="train logo.jpg" alt="鐵路" onerror="this.style.display='none'; this.parentElement.innerHTML='🚇';">
+              </div>
+              <div class="f-info">
+                <div class="f-name" style="color:#7c3aed;">4. 屯馬線鐵路＋輕鐵 ★</div>
+                <div class="f-core-tag" style="color:#7c3aed;">30分鐘連繫市中心上班</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-4" disabled style="background:#7c3aed;" onclick="buildFacility(4)">建造 ＋</button>
+            </div>
+
+            <!-- 5. 公園 -->
+            <div class="facility-card-item" id="fcard-5">
+              <div class="f-logo-thumb">
+                <img src="pond logo.jpg" alt="公園" onerror="this.style.display='none'; this.parentElement.innerHTML='🌳';">
+              </div>
+              <div class="f-info">
+                <div class="f-name">5. 中央公園人工湖</div>
+                <div class="f-cost">造價: -100萬 ｜ 維護: -10萬/年</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-5" disabled onclick="buildFacility(5)">建造 ＋</button>
+            </div>
+
+            <!-- 6. 濕地公園 -->
+            <div class="facility-card-item" id="fcard-6">
+              <div class="f-logo-thumb">
+                <img src="wetland logo.jpg" alt="濕地" onerror="this.style.display='none'; this.parentElement.innerHTML='🪷';">
+              </div>
+              <div class="f-info">
+                <div class="f-name">6. 香港濕地公園</div>
+                <div class="f-cost" style="color:#059669;">特批0元 ｜ 保護黑臉琵鷺</div>
+              </div>
+              <button class="btn-build-action" id="btn-build-6" disabled style="background:#059669;" onclick="buildFacility(6)">設立 ＋</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右欄：地圖畫布、動態分區橫幅 (活用背景大圖) 與分區網格 -->
+        <div class="map-board-panel" id="map-board">
+          
+          <div class="community-atmosphere-bar">
+            <span>📍 天水圍土地分區地圖</span>
+            <span id="atmo-indicator" class="atmo-tag atmo-gloomy">⚠️ 社區氛圍：醫療匱乏・街頭冷清小童少</span>
+          </div>
+
+          <!-- 頂部動態大橫幅：點擊地塊切換展示各背景高清大圖 (活用背景圖) -->
+          <div class="zone-active-banner">
+            <img id="banner-bg-img" src="bg_tin_shui_wai_1980s.png" alt="當前選址背景" onerror="this.src=''; this.parentElement.style.background='#94a3b8';">
+            <div class="banner-overlay-info">
+              <div>
+                <strong id="banner-zone-title" style="font-size:0.85rem;">🌾 1980年代天水圍原貌</strong>
+                <span id="banner-zone-desc" style="display:block; font-size:0.7rem; opacity:0.9;">大片平坦低窪魚塘與農地，等待規劃興建</span>
+              </div>
+              <span id="banner-zone-action" style="font-size:0.7rem; background:rgba(255,255,255,0.25); padding:2px 8px; border-radius:10px;">點擊地塊查看</span>
+            </div>
+          </div>
+
+          <!-- 6 大微觀土地選址格子 -->
+          <div class="zoning-grid-overlay">
+            
+            <div class="zone-slot" id="slot-1" onclick="clickSlot(1)">
+              <span class="zone-badge-tag">南部生活區</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-1" src="building logo.png" style="display:none;">
+                <div class="img-fallback" id="fb-slot-1" style="display:flex;">🌾 魚塘地塊</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-1">適合興建住宅屋苑</div>
+            </div>
+
+            <div class="zone-slot" id="slot-2" onclick="clickSlot(2)">
+              <span class="zone-badge-tag">市中心核心區</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-2" src="market logo.jpg" style="display:none;">
+                <div class="img-fallback" id="fb-slot-2" style="display:flex;">🌾 平原地塊</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-2">適合日常買餸購物</div>
+            </div>
+
+            <div class="zone-slot" id="slot-3" onclick="clickSlot(3)">
+              <span class="zone-badge-tag" style="background:#dc2626;">西部幹線醫療區</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-3" src="hospital logo.png" style="display:none;">
+                <div class="img-fallback" id="fb-slot-3" style="display:flex;">🌾 救護車專用地</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-3">天水圍醫院專用地</div>
+            </div>
+
+            <div class="zone-slot" id="slot-4" onclick="clickSlot(4)">
+              <span class="zone-badge-tag" style="background:#7c3aed;">外聯交通樞紐</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-4" src="train logo.jpg" style="display:none;">
+                <div class="img-fallback" id="fb-slot-4" style="display:flex;">🌾 鐵路預留地</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-4">屯馬線車站與輕鐵</div>
+            </div>
+
+            <div class="zone-slot" id="slot-5" onclick="clickSlot(5)">
+              <span class="zone-badge-tag" style="background:#059669;">中央休閒綠肺</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-5" src="pond logo.jpg" style="display:none;">
+                <div class="img-fallback" id="fb-slot-5" style="display:flex;">🌾 水塘低地</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-5">天水圍公園人工湖</div>
+            </div>
+
+            <div class="zone-slot" id="slot-6" onclick="clickSlot(6)">
+              <span class="zone-badge-tag" style="background:#0d9488;">北部候鳥生態區</span>
+              <div class="zone-slot-img img-box">
+                <img id="img-slot-6" src="wetland logo.jpg" style="display:none;">
+                <div class="img-fallback" id="fb-slot-6" style="display:flex;">🌾 后海灣緩衝地</div>
+              </div>
+              <div class="zone-name-text" id="name-slot-6">香港濕地公園保護區</div>
+            </div>
+
+          </div>
+
+          <div class="map-footer-ticker">
+            <span id="ticker-msg">📢 天水圍拓墾正式啟動！請規劃各項生活設施滿足陳氏一家！</span>
+            <button class="btn-build-action" style="background:#15803d; padding:3px 10px;" onclick="advanceNextYear()">
+              推進年份 (Year ➔)
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- 畫面 4：二選一抉擇與生活事件彈窗 -->
+    <div class="modal-backdrop" id="modal-event">
+      <div class="event-card-box">
+        <div class="event-top-bar">
+          <span class="speaker-tag" id="ev-type-tag">⚡ 突發民生事件</span>
+          <span id="ev-year-badge" style="font-size:0.75rem; color:var(--gray);">Year 1</span>
+        </div>
+        
+        <h3 class="event-card-title" id="ev-title">事件標題</h3>
+
+        <div class="img-box" style="height:120px; margin:6px 0;">
+          <img id="ev-img" src="event_cross_district_school.png" alt="事件插畫" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="img-fallback" id="ev-fallback">
+            <span style="font-size:1.8rem;">🎴</span>
+            <strong id="ev-fallback-code">[event_image.png]</strong>
+          </div>
+        </div>
+
+        <p class="event-desc-p" id="ev-desc">
+          事件詳細描述文字...
+        </p>
+
+        <div id="ev-choices-area">
+          <button class="dilemma-btn-opt" id="ev-opt-A" onclick="chooseDilemma('A')">選項 A</button>
+          <button class="dilemma-btn-opt" id="ev-opt-B" onclick="chooseDilemma('B')">選項 B</button>
+        </div>
+
+        <button class="btn-build-action" id="ev-btn-ok" style="width:100%; margin-top:8px; padding:8px; display:none;" onclick="closeEventModal()">
+          確認並繼續規劃 ➔
+        </button>
+      </div>
+    </div>
+
+
+    <!-- 財政儲備告急警告彈窗 -->
+    <div class="modal-backdrop" id="modal-budget-warning">
+      <div class="event-card-box" style="border-top-color:#dc2626;">
+        <div style="font-size:2rem; text-align:center;">📉</div>
+        <h3 style="font-size:1.15rem; color:#dc2626; text-align:center; margin-bottom:6px;">⚠️ 財政儲備告急！無法推行便民政策</h3>
+        <p style="font-size:0.82rem; color:#334155; line-height:1.5; background:#fef2f2; padding:10px; border-radius:8px; border:1px solid #fecdd3;">
+          <strong>警告：</strong> 您在建設時將手頭資金幾乎耗盡，庫房現有儲備不足以支付各項公共設施的年度維護費！<br><br>
+          由於政府財政吃緊，無法推出便民交通津貼與社區福利，<strong>陳氏一家全體成員滿意度大幅下降 (-15分)</strong>！<br>
+          請記住：優秀的規劃署長必須<strong>「量入為出」</strong>，預留充足流動儲備作日常維護！
+        </p>
+        <button class="btn-build-action" style="width:100%; margin-top:8px; padding:8px; background:#dc2626;" onclick="closeBudgetWarning()">
+          吸取教訓，依賴新稅收填補支出 ➔
+        </button>
+      </div>
+    </div>
+
+
+    <!-- 畫面 5：結算證書 -->
+    <div class="view-screen" id="screen-ending">
+      <div class="certificate-card">
+        
+        <div class="img-box" style="height:120px; margin-bottom:8px; border-radius:10px;">
+          <img id="end-bg-img" src="bg_ending_ideal_town.png" alt="結局全景" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="img-fallback" style="background:linear-gradient(135deg, #1e5aa0, #15803d); color:white;">
+            <span style="font-size:1.8rem;">🌈</span>
+            <strong>[bg_ending_ideal_town.png]</strong>
+            <span>五星自給自足典範城全景</span>
+          </div>
+        </div>
+
+        <h2 class="cert-title">天水圍新市鎮規劃・結算榮譽證書</h2>
+        <div style="font-size:0.8rem; color:var(--gray);">
+          規劃署長：<strong id="cert-student-name" style="color:var(--dark);">陳小明</strong> 同學（<span id="cert-student-class">4A班</span>）
+        </div>
+
+        <div class="cert-honor-name" id="cert-title-badge">🌟【五星全能自給自足大市長】🌟</div>
+
+        <div style="display:flex; justify-content:center; gap:10px; margin:6px 0;">
+          <div class="img-box" style="width:44px; height:44px; border-radius:50%; border:2px solid #f59e0b;">
+            <img id="cert-badge-img" src="badge_self_sufficiency_master.png" alt="成就徽章" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="img-fallback" style="font-size:1.2rem;">🏅</div>
+          </div>
+        </div>
+
+        <div class="cert-ratings">
+          <div class="cert-rate-item">自給自足: <strong id="c-self">100%</strong></div>
+          <div class="cert-rate-item">居民滿意: <strong id="c-sat">98分</strong></div>
+          <div class="cert-rate-item">交通連繫: <strong id="c-tran">100%</strong></div>
+          <div class="cert-rate-item">自然保育: <strong id="c-eco">100分</strong></div>
+        </div>
+
+        <p style="font-size:0.78rem; color:#334155; line-height:1.5; text-align:left; background:#f8fafc; padding:6px 10px; border-radius:8px;" id="cert-evaluation">
+          評語：你成功為天水圍建立了綜合醫院，解決了看病跨區出屯門的生命危機；興建屯馬線連繫市中心，通勤無阻；並妥善保護后海灣濕地，完美實踐了「發展與保育平衡」！
+        </p>
+
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <button class="btn-build-action" style="flex:1; padding:7px; background:#64748b;" onclick="window.print()">
+            🖨️ 列印/截圖成績單
+          </button>
+          <button class="btn-build-action" style="flex:1; padding:7px; background:var(--primary);" onclick="restartGame()">
+            🔄 重新就職挑戰
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    /* 18 個核心音效合成引擎 (Web Audio API) */
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function ensureAudio() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function createTone(freq, type = 'sine', duration = 0.15, gainVal = 0.1, delay = 0) {
+      setTimeout(() => {
+        ensureAudio();
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + duration);
+        } catch (e) {}
+      }, delay);
+    }
+
+    function snd_ui_click() { createTone(650, 'sine', 0.06, 0.08); }
+    function snd_build_construct() {
+      createTone(261.63, 'triangle', 0.1, 0.15, 0);
+      createTone(329.63, 'triangle', 0.1, 0.15, 80);
+      createTone(392.00, 'triangle', 0.12, 0.15, 160);
+      createTone(523.25, 'triangle', 0.25, 0.18, 240);
+    }
+    function snd_budget_spend() {
+      createTone(987.77, 'sine', 0.08, 0.12, 0);
+      createTone(1318.51, 'sine', 0.18, 0.15, 70);
+    }
+    function snd_error_denied() {
+      createTone(150, 'square', 0.1, 0.1, 0);
+      createTone(130, 'square', 0.15, 0.1, 110);
+    }
+    function snd_ambient_housing() {
+      createTone(330, 'triangle', 0.2, 0.12, 0);
+      createTone(440, 'triangle', 0.25, 0.12, 100);
+    }
+    function snd_market_cashier() {
+      createTone(1800, 'sine', 0.2, 0.15, 0);
+      createTone(1200, 'triangle', 0.1, 0.1, 150);
+    }
+    function snd_hospital_ambulance() {
+      createTone(650, 'sawtooth', 0.2, 0.08, 0);
+      createTone(850, 'sawtooth', 0.2, 0.08, 200);
+      createTone(880, 'sine', 0.1, 0.12, 600);
+      createTone(880, 'sine', 0.15, 0.12, 800);
+    }
+    function snd_transit_train() {
+      createTone(880, 'sine', 0.12, 0.15, 0);
+      createTone(880, 'sine', 0.18, 0.15, 140);
+      createTone(180, 'triangle', 0.4, 0.12, 280);
+    }
+    function snd_park_nature() {
+      createTone(523.25, 'sine', 0.25, 0.08, 0);
+      createTone(280, 'sawtooth', 0.1, 0.12, 250);
+      createTone(230, 'sawtooth', 0.15, 0.12, 380);
+    }
+    function snd_wetland_birds() {
+      createTone(1200, 'sine', 0.08, 0.1, 0);
+      createTone(1600, 'sine', 0.1, 0.1, 80);
+      createTone(2000, 'sine', 0.15, 0.12, 160);
+    }
+    function snd_dad_traffic_honk() {
+      createTone(380, 'sawtooth', 0.15, 0.12, 0);
+      createTone(380, 'sawtooth', 0.2, 0.12, 180);
+    }
+    function snd_dad_cheer() {
+      createTone(440, 'triangle', 0.15, 0.15, 0);
+      createTone(659.25, 'triangle', 0.3, 0.18, 150);
+    }
+    function snd_grandpa_crisis() {
+      createTone(140, 'square', 0.18, 0.12, 0);
+      createTone(600, 'sawtooth', 0.3, 0.1, 300);
+    }
+    function snd_grandpa_relief() {
+      const notes = [261.63, 329.63, 392.00, 523.25];
+      notes.forEach((f, i) => createTone(f, 'sine', 0.2, 0.1, i * 80));
+    }
+    function snd_kids_yay() {
+      createTone(783.99, 'triangle', 0.15, 0.15, 0);
+      createTone(1046.50, 'triangle', 0.25, 0.18, 120);
+    }
+    function snd_event_alert() {
+      createTone(466.16, 'sawtooth', 0.12, 0.12, 0);
+      createTone(698.46, 'sawtooth', 0.3, 0.15, 120);
+    }
+    function snd_dilemma_chosen() {
+      createTone(180, 'square', 0.08, 0.2, 0);
+      createTone(90, 'triangle', 0.25, 0.25, 20);
+    }
+    function snd_ending_A() {
+      const fanfare = [523.25, 523.25, 659.25, 783.99, 1046.50];
+      fanfare.forEach((f, i) => createTone(f, 'triangle', 0.3, 0.2, i * 110));
+    }
+    function snd_ending_B() {
+      createTone(380, 'sawtooth', 0.2, 0.15, 0);
+      createTone(300, 'sawtooth', 0.45, 0.18, 300);
+    }
+    function snd_ending_C() {
+      createTone(750, 'sine', 0.4, 0.1, 0);
+      createTone(500, 'sine', 0.5, 0.08, 350);
+    }
+    function snd_ending_D() {
+      createTone(200, 'sawtooth', 0.3, 0.15, 0);
+      createTone(120, 'triangle', 0.6, 0.2, 300);
+    }
+
+    /* 遊戲狀態變數 */
+    let studentName = "陳小明";
+    let studentClass = "4A班";
+    let currentYear = 1;
+    const maxYears = 8;
+    let budget = 1000;
+    let population = 0;
+
+    let metrics = {
+      selfSuff: 15,
+      sat: 20,
+      transit: 10,
+      eco: 50
+    };
+
+    let builtFacilities = {
+      housing: false,
+      market: false,
+      hospital: false,
+      railway: false,
+      park: false,
+      wetland: false
+    };
+
+    const UPKEEP_RATES = {
+      housing: 10,
+      market: 15,
+      hospital: 20,
+      railway: 25,
+      park: 10,
+      wetland: 0
+    };
+
+    /* 8 大事件卡資料庫 */
+    const eventDeck = [
+      {
+        year: 1,
+        title: "開學大長征・黑眼圈學童！",
+        tag: "🏫 教育民生",
+        img: "event_cross_district_school.png",
+        fallback: "[event_cross_district_school.png]",
+        desc: "天水圍新學年開始！但區內缺乏小學校舍，小皇和小英每天清晨 5:30 起床擠車去市區上學，頂著黑眼圈打瞌睡！",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_event_alert();
+          if (!builtFacilities.housing) metrics.sat -= 5;
+        }
+      },
+      {
+        year: 2,
+        title: "青山公路大塞車・上班大混亂！",
+        tag: "🚌 交通危機",
+        img: "event_traffic_jam.png",
+        fallback: "[event_traffic_jam.png]",
+        desc: "人口持續遷入，但青山公路發生意外巴士動彈不得！爸爸陳先生被困車龍兩小時，快被扣薪了！",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_dad_traffic_honk();
+          if (!builtFacilities.railway) {
+            metrics.transit = Math.max(5, metrics.transit - 10);
+            document.getElementById('sim-tag-father').className = "sim-mood-tag mood-bad";
+            document.getElementById('sim-tag-father').innerText = "嚴重塞車";
+          }
+        }
+      },
+      {
+        year: 3,
+        title: "冬季流感高發・診所排長龍！",
+        tag: "🏥 醫療負荷",
+        img: "event_winter_flu_clinic.png",
+        fallback: "[event_winter_flu_clinic.png]",
+        desc: "冬季流感爆發，普通小診所大排長龍！陳爺爺痛風發燒，小診所無法急救，急需大型綜合醫院！",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_grandpa_crisis();
+        }
+      },
+      {
+        year: 4,
+        title: "⚡ 重大抉擇：急病救命 vs 交通通勤！",
+        tag: "⚖️ 兩難考驗",
+        img: "event_midnight_emergency.png",
+        fallback: "[event_midnight_emergency.png]",
+        desc: "深夜爺爺突發心絞痛必須緊急送院；爸爸上班又天天塞車！資金有限，市長你優先撥款哪一項？",
+        isDilemma: true,
+        optA: "方案 A：優先興建天水圍醫院（設24小時急症室，不需出屯門求醫）",
+        optB: "方案 B：優先興建屯馬線鐵路（連繫市中心上班，解決大塞車）"
+      },
+      {
+        year: 5,
+        title: "暴雨塌樹封路・交通大中斷！",
+        tag: "⛈️ 極端天氣",
+        img: "event_typhoon_road_block.png",
+        fallback: "[event_typhoon_road_block.png]",
+        desc: "黑色暴雨引致公路塌樹，巴士全線停駛！此時只有全天候高架鐵路能夠快速跨區載客。",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_event_alert();
+          if (builtFacilities.railway) {
+            metrics.transit = 100;
+            document.getElementById('ticker-msg').innerText = "🚇 屯馬線發揮動脈作用！市民搭鐵路安全上班，全城點讚！";
+          }
+        }
+      },
+      {
+        year: 6,
+        title: "⚡ 土地規劃抉擇：豪宅開發 vs 濕地保育！",
+        tag: "🪷 生態考驗",
+        img: "event_fishpond_dilemma.png",
+        fallback: "[event_fishpond_dilemma.png]",
+        desc: "地產商提出贊助 500 萬填平北部魚塘蓋豪宅；但環保團體要求保留后海灣濕地保護黑臉琵鷺！",
+        isDilemma: true,
+        optA: "方案 A：拒絕填平魚塘！設立「香港濕地公園」保護黑臉琵鷺（生態滿分）",
+        optB: "方案 B：批准全部蓋豪宅！賺取 500 萬財政收益（生態指數歸零）"
+      },
+      {
+        year: 7,
+        title: "天水圍單車節・全家嘉年華！",
+        tag: "🌳 社區休閒",
+        img: "event_park_cycling_festival.png",
+        fallback: "[event_park_cycling_festival.png]",
+        desc: "週末天晴，新市鎮在中央公園舉辦單車節！陳氏一家在人工湖畔騎單車野餐，身心舒暢！",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_kids_yay();
+          if (builtFacilities.park) {
+            metrics.sat = Math.min(100, metrics.sat + 15);
+          }
+        }
+      },
+      {
+        year: 8,
+        title: "黑臉琵鷺降臨・雙贏典範慶典！",
+        tag: "🕊️ 保育成果",
+        img: "event_spoonbill_arrival.png",
+        fallback: "[event_spoonbill_arrival.png]",
+        desc: "全球珍稀黑臉琵鷺群飛越后海灣，在濕地公園紅樹林降落！天水圍達成自給自足與保育雙贏！",
+        isDilemma: false,
+        onTrigger: () => {
+          snd_wetland_birds();
+        }
+      }
+    ];
+
+    /* 畫面導航 */
+    function switchScreen(screenId) {
+      snd_ui_click();
+      document.querySelectorAll('.view-screen').forEach(el => el.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+    }
+
+    function startGamePrologue() {
+      studentName = document.getElementById('inp-student-name').value || "陳小明";
+      studentClass = document.getElementById('inp-student-class').value || "4A班";
+      switchScreen('screen-prologue');
+    }
+
+    function enterMainGame() {
+      switchScreen('screen-gameplay');
+      updateDisplay();
+      setTimeout(() => triggerYearEvent(1), 500);
+    }
+
+    /* 建造邏輯與選址 (Building & Zoning) */
+    function buildFacility(id) {
+      snd_ui_click();
+      let cost = 0;
+
+      if (id === 1) { // 住宅
+        cost = 200;
+        if (budget < cost) { snd_error_denied(); alert("💰 資金不足！"); return; }
+        builtFacilities.housing = true;
+        population = 35000;
+        metrics.selfSuff += 15;
+        metrics.sat += 15;
+        
+        snd_budget_spend();
+        setTimeout(snd_ambient_housing, 180);
+        occupySlot(1, "building logo.png", "天耀/天瑞公營屋苑");
+        
+        document.getElementById('sim-av-mother').src = 'avatar_mother_satisfied.png';
+        document.getElementById('sim-tag-mother').innerText = "有新家住";
+        document.getElementById('sim-tag-mother').className = "sim-mood-tag mood-good";
+
+        updateBannerView(1, "🏢 天水圍公共屋邨群", "粉彩大樓開揚中庭廣場，成功安置市區密集人口", "bg_housing_estate.png");
+        unlockNextBuild(2);
+      } 
+      else if (id === 2) { // 街市商場
+        cost = 150;
+        if (budget < cost) { snd_error_denied(); alert("💰 資金不足！"); return; }
+        builtFacilities.market = true;
+        metrics.selfSuff += 25;
+        metrics.sat += 20;
+
+        snd_budget_spend();
+        setTimeout(snd_market_cashier, 180);
+        occupySlot(2, "market logo.jpg", "天盛街市＋置富商場");
+
+        document.getElementById('sim-av-mother').src = 'avatar_mother_satisfied.png';
+        document.getElementById('sim-tag-mother').innerText = "買餸好方便";
+
+        document.getElementById('sim-av-boy').src = 'avatar_child_joyful.png';
+        document.getElementById('sim-tag-boy').innerText = "就近上學";
+        document.getElementById('sim-tag-boy').className = "sim-mood-tag mood-good";
+
+        document.getElementById('sim-av-girl').src = 'avatar_girl_happy.png';
+        document.getElementById('sim-tag-girl').innerText = "上學好近";
+        document.getElementById('sim-tag-girl').className = "sim-mood-tag mood-good";
+
+        updateBannerView(2, "🥩 天盛冷氣街市與商場", "新鮮蔬果海鮮一應俱全，下樓即可採購生活所需", "bg_wet_market_mall.png");
+        unlockNextBuild(3);
+      }
+      else if (id === 3) { // 醫院 (核心重點)
+        cost = 250;
+        if (budget < cost) { snd_error_denied(); alert("💰 資金不足！"); return; }
+        builtFacilities.hospital = true;
+        metrics.selfSuff += 25;
+        metrics.sat += 20;
+
+        snd_budget_spend();
+        setTimeout(snd_hospital_ambulance, 180);
+        occupySlot(3, "hospital logo.png", "天水圍綜合醫院 (急症)");
+
+        document.getElementById('sim-av-grandpa').src = 'avatar_grandfather_healthy.png';
+        document.getElementById('sim-tag-grandpa').className = "sim-mood-tag mood-good";
+        document.getElementById('sim-tag-grandpa').innerText = "不用出屯門求醫";
+
+        updateBannerView(3, "🏥 天水圍綜合醫院 (設24小時急症室)", "核心設施：區內直接救治急重症，不用跨區出屯門求醫！", "bg_district_hospital.png");
+        unlockNextBuild(4);
+      }
+      else if (id === 4) { // 鐵路 (核心重點)
+        cost = 250;
+        if (budget < cost) { snd_error_denied(); alert("💰 資金不足！"); return; }
+        builtFacilities.railway = true;
+        metrics.selfSuff += 15;
+        metrics.transit = 100;
+        metrics.sat += 20;
+
+        snd_budget_spend();
+        setTimeout(snd_transit_train, 180);
+        occupySlot(4, "train logo.jpg", "屯馬線車站＋輕鐵路網");
+
+        document.getElementById('sim-av-father').src = 'avatar_father_happy.png';
+        document.getElementById('sim-tag-father').className = "sim-mood-tag mood-good";
+        document.getElementById('sim-tag-father').innerText = "30分鐘到市區";
+
+        updateBannerView(4, "🚇 港鐵屯馬線天水圍站與輕鐵", "核心動脈：高架直連市中心上班，新市鎮告別孤島交通！", "bg_tuen_ma_light_rail.png");
+        unlockNextBuild(5);
+      }
+      else if (id === 5) { // 公園
+        cost = 100;
+        if (budget < cost) { snd_error_denied(); alert("💰 資金不足！"); return; }
+        builtFacilities.park = true;
+        metrics.sat += 15;
+        metrics.eco += 20;
+
+        snd_budget_spend();
+        setTimeout(snd_park_nature, 180);
+        occupySlot(5, "pond logo.jpg", "天水圍公園人工湖");
+
+        document.getElementById('sim-av-boy').src = 'avatar_child_joyful.png';
+        document.getElementById('sim-tag-boy').innerText = "公園騎單車";
+        document.getElementById('sim-av-girl').src = 'avatar_girl_happy.png';
+        document.getElementById('sim-tag-girl').innerText = "放假好開心";
+
+        updateBannerView(5, "🌳 天水圍中央公園與屏山圖書館", "人工湖畔綠草如茵，提供全家運動休閒綠肺與借書閱讀", "bg_central_park_lake.png");
+        unlockNextBuild(6);
+      }
+      else if (id === 6) { // 濕地公園
+        cost = 0;
+        builtFacilities.wetland = true;
+        metrics.selfSuff = 100;
+        metrics.eco = 100;
+        metrics.sat = 100;
+
+        snd_build_construct();
+        setTimeout(snd_wetland_birds, 200);
+        occupySlot(6, "wetland logo.jpg", "香港濕地公園保護區");
+
+        document.getElementById('fcard-6').className = "facility-card-item upgraded";
+        document.getElementById('btn-build-6').disabled = true;
+        document.getElementById('btn-build-6').innerText = "已設立 ✅";
+
+        updateBannerView(6, "🪷 香港濕地公園生態保護區", "后海灣綠色緩衝區，黑臉琵鷺翩翩飛舞，達成發展與保育雙贏！", "bg_wetland_park.png");
+      }
+
+      budget -= cost;
+      updateDisplay();
+    }
+
+    function occupySlot(slotNum, imgSrc, labelText) {
+      const slot = document.getElementById(`slot-${slotNum}`);
+      const img = document.getElementById(`img-slot-${slotNum}`);
+      const fb = document.getElementById(`fb-slot-${slotNum}`);
+      const name = document.getElementById(`name-slot-${slotNum}`);
+
+      slot.classList.add('built');
+      img.src = imgSrc;
+      img.style.display = 'block';
+      fb.style.display = 'none';
+      name.innerText = labelText;
+    }
+
+    function unlockNextBuild(nextId) {
+      const curCard = document.getElementById(`fcard-${nextId - 1}`);
+      curCard.className = "facility-card-item upgraded";
+      const curBtn = document.getElementById(`btn-build-${nextId - 1}`);
+      curBtn.disabled = true;
+      curBtn.innerText = "已建 ✅";
+
+      const nextCard = document.getElementById(`fcard-${nextId}`);
+      if (nextCard) {
+        nextCard.classList.add('ready');
+        document.getElementById(`btn-build-${nextId}`).disabled = false;
+      }
+    }
+
+    function clickSlot(slotNum) {
+      snd_ui_click();
+      if (slotNum === 1) {
+        updateBannerView(1, "🏢 南部住宅生活區 (天耀/天瑞)", "粉彩公屋高樓林立，安置市區數萬居民", "bg_housing_estate.png");
+        if (builtFacilities.housing) snd_ambient_housing();
+      } else if (slotNum === 2) {
+        updateBannerView(2, "🥩 市中心核心區 (天盛街市＋商場)", "冷氣街市明亮整潔，新鮮蔬果豐富", "bg_wet_market_mall.png");
+        if (builtFacilities.market) snd_market_cashier();
+      } else if (slotNum === 3) {
+        updateBannerView(3, "🏥 西部動脈區 (天水圍醫院)", "24小時急症室守護，不需出屯門求醫！", "bg_district_hospital.png");
+        if (builtFacilities.hospital) snd_hospital_ambulance();
+      } else if (slotNum === 4) {
+        updateBannerView(4, "🚇 外聯交通樞紐 (屯馬線車站)", "高架直通九龍市區，30分鐘直達中環上班", "bg_tuen_ma_light_rail.png");
+        if (builtFacilities.railway) snd_transit_train();
+      } else if (slotNum === 5) {
+        updateBannerView(5, "🌳 中央休閒綠肺 (天水圍公園)", "人工湖水鴨戲水，屏山圖書館提供書香", "bg_central_park_lake.png");
+        if (builtFacilities.park) snd_park_nature();
+      } else if (slotNum === 6) {
+        updateBannerView(6, "🪷 北部候鳥生態區 (濕地公園)", "后海灣珍稀黑臉琵鷺，生態教育示範", "bg_wetland_park.png");
+        if (builtFacilities.wetland) snd_wetland_birds();
+      }
+    }
+
+    function updateBannerView(id, title, desc, bgImg) {
+      document.getElementById('banner-bg-img').src = bgImg;
+      document.getElementById('banner-zone-title').innerText = title;
+      document.getElementById('banner-zone-desc').innerText = desc;
+      document.getElementById('banner-zone-action').innerText = "分區 " + id + " 實景概念圖";
+    }
+
+    /* 回合推進、維護費結算與「財政儲備告急警告」 */
+    function advanceNextYear() {
+      snd_ui_click();
+      
+      if (currentYear >= maxYears) {
+        evaluateGameEnding();
+        return;
+      }
+
+      let totalUpkeep = 0;
+      for (const [fac, isBuilt] of Object.entries(builtFacilities)) {
+        if (isBuilt) totalUpkeep += UPKEEP_RATES[fac];
+      }
+
+      if (budget < totalUpkeep) {
+        metrics.sat = Math.max(0, metrics.sat - 15);
+        document.getElementById('sim-tag-father').innerText = "政策被砍";
+        document.getElementById('sim-tag-mother').innerText = "津貼減少";
+        document.getElementById('sim-tag-grandpa').innerText = "服務縮減";
+        document.getElementById('sim-tag-boy').innerText = "活動取消";
+        document.getElementById('sim-tag-girl').innerText = "心情低落";
+
+        snd_error_denied();
+        document.getElementById('modal-budget-warning').style.display = 'flex';
+        return;
+      }
+
+      proceedAnnualCalculations(totalUpkeep);
+    }
+
+    function closeBudgetWarning() {
+      snd_ui_click();
+      document.getElementById('modal-budget-warning').style.display = 'none';
+      let totalUpkeep = 0;
+      for (const [fac, isBuilt] of Object.entries(builtFacilities)) {
+        if (isBuilt) totalUpkeep += UPKEEP_RATES[fac];
+      }
+      proceedAnnualCalculations(totalUpkeep);
+    }
+
+    function proceedAnnualCalculations(totalUpkeep) {
+      currentYear++;
+      
+      let taxRevenue = builtFacilities.housing ? 100 : 30;
+      budget = budget + taxRevenue - totalUpkeep;
+
+      updateDisplay();
+      triggerYearEvent(currentYear);
+    }
+
+    function triggerYearEvent(yr) {
+      const ev = eventDeck[yr - 1];
+      const modal = document.getElementById('modal-event');
+      
+      document.getElementById('ev-type-tag').innerText = ev.tag;
+      document.getElementById('ev-year-badge').innerText = `Year ${ev.year} / 8`;
+      document.getElementById('ev-title').innerText = ev.title;
+      document.getElementById('ev-desc').innerText = ev.desc;
+      
+      const img = document.getElementById('ev-img');
+      img.src = ev.img;
+      document.getElementById('ev-fallback-code').innerText = ev.fallback;
+
+      const choicesArea = document.getElementById('ev-choices-area');
+      const okBtn = document.getElementById('ev-btn-ok');
+
+      if (ev.isDilemma) {
+        choicesArea.style.display = 'block';
+        okBtn.style.display = 'none';
+        document.getElementById('ev-opt-A').innerText = ev.optA;
+        document.getElementById('ev-opt-B').innerText = ev.optB;
+        snd_event_alert();
+      } else {
+        choicesArea.style.display = 'none';
+        okBtn.style.display = 'block';
+        if (ev.onTrigger) ev.onTrigger();
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function chooseDilemma(choice) {
+      snd_dilemma_chosen();
+      document.getElementById('modal-event').style.display = 'none';
+
+      if (currentYear === 4) {
+        if (choice === 'A') {
+          buildFacility(3);
+          document.getElementById('ticker-msg').innerText = "🏥 市長明智抉擇：優先興建天水圍醫院，爺爺急症及時救治！不用出屯門求醫！";
+        } else {
+          buildFacility(4);
+          document.getElementById('ticker-msg').innerText = "🚇 市長決策：優先開通屯馬線，爸爸上班暢通無阻！";
+        }
+      } else if (currentYear === 6) {
+        if (choice === 'A') {
+          buildFacility(6);
+          document.getElementById('ticker-msg').innerText = "🪷 市長英明決策：守護后海灣魚塘生態，迎來黑臉琵鷺！";
+        } else {
+          budget += 500;
+          metrics.eco = 0;
+          document.getElementById('ticker-msg').innerText = "⚠️ 市長出賣魚塘蓋豪宅！獲得500萬但生態歸零，候鳥離去！";
+        }
+      }
+      updateDisplay();
+    }
+
+    function closeEventModal() {
+      snd_ui_click();
+      document.getElementById('modal-event').style.display = 'none';
+    }
+
+    function updateDisplay() {
+      document.getElementById('hdr-year').innerText = `第 ${currentYear} 年 (Year ${currentYear}/8)`;
+      document.getElementById('hdr-budget').innerText = `${budget} 萬`;
+      document.getElementById('hdr-pop').innerText = `${population} 人`;
+
+      document.getElementById('val-self-suff').innerText = metrics.selfSuff;
+      document.getElementById('val-satisfaction').innerText = metrics.sat;
+      document.getElementById('val-transit').innerText = metrics.transit;
+      document.getElementById('val-ecology').innerText = metrics.eco;
+
+      let totalUpkeep = 0;
+      for (const [fac, isBuilt] of Object.entries(builtFacilities)) {
+        if (isBuilt) totalUpkeep += UPKEEP_RATES[fac];
+      }
+      document.getElementById('txt-upkeep-sum').innerText = `年維護費: -${totalUpkeep}萬`;
+
+      const mapBoard = document.getElementById('map-board');
+      const atmoIndicator = document.getElementById('atmo-indicator');
+
+      if (!builtFacilities.hospital || metrics.sat < 50) {
+        mapBoard.style.filter = "saturate(0.65) brightness(0.92)";
+        atmoIndicator.className = "atmo-tag atmo-gloomy";
+        atmoIndicator.innerText = "⚠️ 社區氛圍：醫療匱乏・街頭冷清小童少";
+      } else if (builtFacilities.hospital && builtFacilities.park) {
+        mapBoard.style.filter = "saturate(1.2) brightness(1.02)";
+        atmoIndicator.className = "atmo-tag atmo-vibrant";
+        atmoIndicator.innerText = "✨ 社區氛圍：綠意盎然・老幼歡樂共融";
+      } else {
+        mapBoard.style.filter = "none";
+        atmoIndicator.className = "atmo-tag";
+        atmoIndicator.style.background = "#e2e8f0";
+        atmoIndicator.style.color = "#334155";
+        atmoIndicator.innerText = "建設進行中・逐步自給自足";
+      }
+    }
+
+    /* 結算與結局判定 */
+    function evaluateGameEnding() {
+      switchScreen('screen-ending');
+
+      document.getElementById('cert-student-name').innerText = studentName;
+      document.getElementById('cert-student-class').innerText = studentClass;
+      document.getElementById('c-self').innerText = metrics.selfSuff + '%';
+      document.getElementById('c-sat').innerText = metrics.sat + '分';
+      document.getElementById('c-tran').innerText = metrics.transit + '%';
+      document.getElementById('c-eco').innerText = metrics.eco + '分';
+
+      const titleEl = document.getElementById('cert-title-badge');
+      const descEl = document.getElementById('cert-evaluation');
+      const bgImg = document.getElementById('end-bg-img');
+      const badgeImg = document.getElementById('cert-badge-img');
+
+      if (metrics.selfSuff >= 80 && metrics.eco >= 70 && builtFacilities.hospital && builtFacilities.railway) {
+        snd_ending_A();
+        titleEl.innerText = "🌟【五星全能自給自足大市長】🌟";
+        titleEl.style.color = "#b45309";
+        bgImg.src = "bg_ending_ideal_town.png";
+        badgeImg.src = "badge_self_sufficiency_master.png";
+        descEl.innerHTML = `
+          <strong>🏆 卓越建城成就：</strong> 你成功為天水圍建立了完整的<strong>綜合醫院（急症不用出屯門求醫）</strong>、
+          <strong>屯馬線快速鐵路（30分鐘直達市中心上班）</strong>，並堅持設立<strong>香港濕地公園</strong>保護黑臉琵鷺！
+          陳氏一家五口安居樂業，完美達成四年級人文科「自給自足與保育平衡」的核心目標！
+        `;
+      } 
+      else if (!builtFacilities.railway || metrics.transit < 50) {
+        snd_ending_B();
+        titleEl.innerText = "🚌【通勤噩夢・孤島睡城製造者】";
+        titleEl.style.color = "#991b1b";
+        bgImg.src = "bg_ending_traffic_gridlock.png";
+        badgeImg.src = "badge_transit_pioneer.png";
+        descEl.innerHTML = `
+          <strong>⚠️ 交通孤島反思：</strong> 雖然興建了大量住宅，但<strong>忽視了對外高速鐵路建設</strong>！
+          爸爸每天困在青山公路大塞車中，新市鎮淪為只有睡覺功能的「睡城」。記住：新市鎮必須有鐵路才能連繫市區上班！
+        `;
+      }
+      else if (metrics.eco <= 30) {
+        snd_ending_D();
+        titleEl.innerText = "🌪️【水泥森林・生態浩劫市長】";
+        titleEl.style.color = "#4c0519";
+        bgImg.src = "bg_ending_concrete_jungle.png";
+        badgeImg.src = "badge_eco_protector.png";
+        descEl.innerHTML = `
+          <strong>⚠️ 可持續發展反思：</strong> 你出賣了后海灣魚塘蓋豪宅，雖然賺得大量金錢，但<strong>破壞了珍貴濕地生態</strong>！
+          黑臉琵鷺絕跡，城市熱島效應嚴重。記住：推動城市發展必須在社會需要與自然保育之間取得平衡！
+        `;
+      }
+      else {
+        snd_ending_C();
+        titleEl.innerText = "⚠️【民生配套匱乏・失衡市長】";
+        titleEl.style.color = "#b45309";
+        descEl.innerHTML = `
+          <strong>⚠️ 自給自足反思：</strong> 區內缺乏完善的醫院或街市配套，陳爺爺生病仍要長途跋涉跨區求醫，買菜極為昂貴，
+          未能真正落實新市鎮「自給自足」的核心理念！
+        `;
+      }
+    }
+
+    function restartGame() {
+      snd_ui_click();
+      currentYear = 1;
+      budget = 1000;
+      population = 0;
+      metrics = { selfSuff: 15, sat: 20, transit: 10, eco: 50 };
+      builtFacilities = { housing: false, market: false, hospital: false, railway: false, park: false, wetland: false };
+
+      for (let i = 1; i <= 6; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        slot.className = "zone-slot";
+        document.getElementById(`img-slot-${i}`).style.display = 'none';
+        document.getElementById(`fb-slot-${i}`).style.display = 'flex';
+      }
+
+      for (let i = 1; i <= 6; i++) {
+        const card = document.getElementById(`fcard-${i}`);
+        const btn = document.getElementById(`btn-build-${i}`);
+        card.className = "facility-card-item";
+        btn.innerText = "建造 ＋";
+        btn.disabled = (i !== 1);
+      }
+      document.getElementById('fcard-1').classList.add('ready');
+
+      document.getElementById('sim-av-father').src = 'avatar_father_stressed.png';
+      document.getElementById('sim-tag-father').className = "sim-mood-tag mood-bad";
+      document.getElementById('sim-tag-father').innerText = "塞車遲到";
+
+      document.getElementById('sim-av-mother').src = 'avatar_mother_worried.png';
+      document.getElementById('sim-tag-mother').className = "sim-mood-tag mood-bad";
+      document.getElementById('sim-tag-mother').innerText = "買餸好遠";
+
+      document.getElementById('sim-av-grandpa').src = 'avatar_grandfather_sick.png';
+      document.getElementById('sim-tag-grandpa').className = "sim-mood-tag mood-bad";
+      document.getElementById('sim-tag-grandpa').innerText = "求醫困難";
+
+      document.getElementById('sim-av-boy').src = 'avatar_child_bored.png';
+      document.getElementById('sim-tag-boy').className = "sim-mood-tag mood-bad";
+      document.getElementById('sim-tag-boy').innerText = "無學無玩";
+
+      document.getElementById('sim-av-girl').src = 'avatar_girl_sad.png';
+      document.getElementById('sim-tag-girl').className = "sim-mood-tag mood-bad";
+      document.getElementById('sim-tag-girl').innerText = "無聊發呆";
+
+      updateBannerView(0, "🌾 1980年代天水圍原貌", "大片平坦低窪魚塘與農地，等待規劃興建", "bg_tin_shui_wai_1980s.png");
+      switchScreen('screen-cover');
+    }
   </script>
 </body>
 </html>
